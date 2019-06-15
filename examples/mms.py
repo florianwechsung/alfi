@@ -70,3 +70,11 @@ if comm.rank == 0:
         print("convergence orders:", convergence_orders(results[re]["pressure"]))
     print("gamma =", args.gamma)
     print("h =", hs)
+
+    for re in res:
+        print("%%Re = %i" % re)
+        print("\\pgfplotstableread[col sep=comma, row sep=\\\\]{%%")
+        print("h,error_v,error_p\\\\")
+        for i in range(len(hs)):
+            print(",".join(map(str, [hs[i], results[re]["velocity"][i], results[re]["pressure"][i]])) + "\\\\")
+        print("}\\\\re%i" % re)
