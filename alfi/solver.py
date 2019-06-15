@@ -114,6 +114,9 @@ class NavierStokesSolver(object):
         mesh = mh[-1]
         uviss = []
  
+        self.mesh = mesh
+        Z = self.function_space(mesh, k)
+        self.Z = Z
         comm = mesh.mpi_comm()
         if comm.size == 1:
             visbase = firedrake.Mesh(mesh._plex.clone(), dim=mesh.ufl_cell().geometric_dimension(),
@@ -121,13 +124,12 @@ class NavierStokesSolver(object):
                                      reorder=True)
             vismh = MeshHierarchy(visbase, nref_vis)
             for vismesh in vismh:
-                V = VectorFunctionSpace(vismesh, "CG", 2)
+                V = VectorFunctionSpace(vismesh, Z.sub(0).ufl_element())
                 uviss.append(Function(V, name="VelocityRefined"))
-
             def visprolong(u):
-                if nref_vis == 0:
-                    return u
                 uviss[0].dat.data[:] = u.dat.data_ro
+                if nref_vis == 0:
+                    return uviss[0]
                 uc = uviss[0]
                 for i in range(nref_vis):
                     prolong(uc, uviss[i+1])
@@ -139,9 +141,6 @@ class NavierStokesSolver(object):
 
         self.visprolong = visprolong
 
-        self.mesh = mesh
-        Z = self.function_space(mesh, k)
-        self.Z = Z
 
 
         Zdim = self.Z.dim()
@@ -238,6 +237,7 @@ class NavierStokesSolver(object):
         else:
             self.advect.assign(1)
             self.nu.assign(self.char_L*self.char_U/re)
+        # self.gamma.assign(1+re)
 
         if self.stabilisation is not None:
             self.stabilisation.update(self.z.split()[0])

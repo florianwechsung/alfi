@@ -19,7 +19,7 @@ step = 100
 res = [1, 10, 100] + list(range(start, end+step, step))
 
 results = {}
-nrefs = range(1, 4)
+nrefs = range(1, 3)
 tableres = [i for i in [1, 10, 100, 1000, 5000, 10000] if i <= max(res)]
 for nref in nrefs:
     args.nref = nref
