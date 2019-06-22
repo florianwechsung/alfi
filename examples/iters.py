@@ -6,10 +6,12 @@ import os
 parser = get_default_parser()
 parser.add_argument("--problem", type=str, required=True,
                     choices=["ldc2d"])
+parser.add_argument("--diagonal", type="left", default=None,
+                    choices=["left", "right", "crossed"])
 args, _ = parser.parse_known_args()
 
 if args.problem == "ldc2d":
-    problem = TwoDimLidDrivenCavityProblem(args.baseN)
+    problem = TwoDimLidDrivenCavityProblem(args.baseN, args.diagonal)
 else:
     raise NotImplementedError
 

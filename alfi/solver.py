@@ -56,7 +56,8 @@ class NavierStokesSolver(object):
     def __init__(self, problem, nref=1, solver_type="almg",
                  stabilisation_type=None,
                  supg_method="shakib", supg_magic=9.0, gamma=10000, nref_vis=1,
-                 k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None):
+                 k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
+                 patch_composition="additive"):
 
         assert solver_type in {"almg", "allu", "lu"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
@@ -77,6 +78,7 @@ class NavierStokesSolver(object):
         self.parallel = baseMesh.comm.size > 1
         self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
+        self.patch_composition = patch_composition
 
 
         def before(dm, i):
@@ -118,7 +120,7 @@ class NavierStokesSolver(object):
         Z = self.function_space(mesh, k)
         self.Z = Z
         comm = mesh.mpi_comm()
-        if comm.size == 1:
+        if False:#comm.size == 1:
             visbase = firedrake.Mesh(mesh._plex.clone(), dim=mesh.ufl_cell().geometric_dimension(),
                                      distribution_parameters=problem.distribution_parameters,
                                      reorder=True)
@@ -137,7 +139,7 @@ class NavierStokesSolver(object):
                 return uviss[-1]
         else:
             def visprolong(u):
-                return u
+                return u.clone(deepcopy=True)
 
         self.visprolong = visprolong
 
@@ -201,7 +203,7 @@ class NavierStokesSolver(object):
             else:
                 raise NotImplementedError
         elif self.stabilisation_type == "burman":
-            self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=wind, h=problem.mesh_size(u), weight=stabilisation_weight)
+            self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u), weight=stabilisation_weight)
             self.stabilisation_form = self.stabilisation.form(u, v)
         else:
             self.stabilisation = None
@@ -275,7 +277,9 @@ class NavierStokesSolver(object):
         return (self.z, info_dict)
 
     def get_parameters(self):
-        multiplicative = self.problem.relaxation_direction() is not None
+        multiplicative = self.patch_composition == "multiplicative"
+        if multiplicative and self.problem.relaxation_direction() is None:
+            raise NotImplementedError("Need to specify a relaxation_direction in the problem.")
         patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
         patchlu2d = "petsc"
 
@@ -483,7 +487,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
         if self.stabilisation_type in ["burman", None]:
             qtransfer = NullTransfer()
         elif self.stabilisation_type in ["gls", "supg"]:
-            qtransfer = DGTransfer()
+            qtransfer = EmbeddedDGTransfer(V.ufl_element())
         else:
             raise ValueError("Unknown stabilisation")
         transfers = [dmhooks.transfer_operators(Q, inject=qtransfer.inject)]

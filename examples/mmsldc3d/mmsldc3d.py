@@ -6,28 +6,24 @@ import os
 
 
 
-class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
-    def __init__(self, baseN, Re=Constant(1), Repres=None):
+class ThreeDimLidDrivenCavityMMSProblem(NavierStokesProblem):
+    def __init__(self, baseN, Re=Constant(1)):
         super().__init__()
         self.baseN = baseN
         self.Re = Re
-        if Repres is None:
-            self.Repres = Re
-        else:
-            self.Repres = Repres
 
     def mesh(self, distribution_parameters):
-        # base = RectangleMesh(self.baseN, self.baseN, 2, 2,
-        #                      distribution_parameters=distribution_parameters)
+        base = BoxMesh(self.baseN, self.baseN, self.baseN, 2, 2, 2,
+                             distribution_parameters=distribution_parameters)
 
-        base = Mesh(os.path.dirname(os.path.abspath(__file__)) + "/square.msh",
-                    distribution_parameters=distribution_parameters)
+        # base = Mesh(os.path.dirname(os.path.abspath(__file__)) + "/cube.msh",
+        #             distribution_parameters=distribution_parameters)
         
         return base
 
     def bcs(self, Z):
-        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], [4]),
-               DirichletBC(Z.sub(0), Constant((0., 0.)), [1, 2, 3])]
+        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], [4, 5, 6]),
+               DirichletBC(Z.sub(0), Constant((0., 0., 0.)), [1, 2, 3])]
         return bcs
 
     def has_nullspace(self): return True
@@ -41,7 +37,7 @@ class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
     def actual_solution(self, Z):
         # Taken from 'EFFECTS OF GRID STAGGERING ON NUMERICAL SCHEMES - Shih, Tan, Hwang'
         X = SpatialCoordinate(Z.mesh())
-        (x, y) = X
+        (x, y, z) = X
         """ Either implement the form in the paper by Shih, Tan, Hwang and then
         use ufl to rescale, or just implement the rescaled version directly """
         f = x**4 - 2 * x**3 + x**2
@@ -60,15 +56,17 @@ class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         u = 8 * f * dg
         v = -8 * df * g
         p = (8./self.Re) * (F * dddg + df*dg) + 64 * F2 * (g*ddg-dg**2)
+        # p = 64 * F2 * (g*ddg-dg**2)
         u = replace(u, {X: 0.5 * X})
         v = replace(v, {X: 0.5 * X})
+        w = replace(w, {X: 0.5 * X})
         p = replace(p, {X: 0.5 * X})
-        p = p - 0.25 * assemble(p*dx)
+        p = p - 0.125 * assemble(p*dx)
         # u = (1./4.)*(-2 + x)**2 * x**2 * y * (-2 + y**2)
         # v = -(1./4.)*x*(2 - 3*x + x**2)*y**2*(-4 + y**2)
         # p = -(1./128.)*(-2+x)**4*x**4*y**2*(8-2*y**2+y**4)+(x*y*(-15*x**3+3*x**4+10*x**2*y**2+20*(-2+y**2)-30*x*(-2+y**2)))/(5*self.Re)
         # p = p - (-(1408./33075.) + 8./(5*self.Re))
-        driver = as_vector([u, v])
+        driver = as_vector([u, v, Constant(0)])
         return (driver, p)
 
     def rhs(self, Z):

@@ -1,2 +1,2 @@
 all:
-	gmsh -2 -clscale 0.1 square.geo
+	gmsh -2 -clscale 0.2 square.geo -smooth 3

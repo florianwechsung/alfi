@@ -57,6 +57,7 @@ def get_solver(args, problem):
         supg_method="shakib",
         stabilisation_weight=args.stabilisation_weight,
         hierarchy=args.mh,
+        patch_composition=args.patch_composition
     )
     return solver
 

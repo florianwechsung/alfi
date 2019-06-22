@@ -1,3 +1,6 @@
 *.pyc
 alfi/__pycache__/*
 *.egg-info
+*.vtu
+*.pvd
+*.pvtu

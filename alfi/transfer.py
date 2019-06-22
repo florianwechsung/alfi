@@ -8,6 +8,7 @@ import numpy
 from pyop2.datatypes import IntType
 from firedrake.mg.utils import *
 from pyop2.profiling import timed_function
+from alfi.bubble import BubbleTransfer
 
 class CoarseCellPatches(object):
     def __call__(self, pc):
@@ -227,11 +228,11 @@ class AutoSchoeberlTransfer(object):
                 self.prev_parameters[key] = [float(param) for param in self.parameters]
 
         if mode == "prolong":
-            prolong(coarse, rhs)
+            self.standard_transfer(coarse, rhs, "prolong")
 
             b = assemble(bform, bcs=bcs, tensor=b)
             # # Could do
-            # #solver.solve(tildeu, b)
+            # # solver.solve(tildeu, b)
             # # but that calls a lot of SNES and KSP overhead.
             # # We know we just want to apply the PC:
             with solver.inserted_options():
@@ -253,7 +254,7 @@ class AutoSchoeberlTransfer(object):
             b = assemble(bform, tensor=b)
             # rhs.assign(fine-b)
             rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
-            restrict(rhs, coarse)
+            self.standard_transfer(rhs, coarse, "restrict")
 
         
         (nu, gamma) = self.parameters
@@ -272,6 +273,15 @@ class AutoSchoeberlTransfer(object):
         # warning("\|rhs\| %.10f" % energy_norm(rhs))
         # import sys; sys.exit(1)
 
+    def standard_transfer(self, source, target, mode):
+        if mode == "prolong":
+            prolong(source, target)
+        elif mode == "restrict":
+            restrict(source, target)
+        else:
+            raise NotImplementedError
+
+
 
 class SVSchoeberlTransfer(AutoSchoeberlTransfer):
 
@@ -287,8 +297,8 @@ class SVSchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        # a = gamma*inner(div(u), div(v))*dx
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx
+        a = gamma*inner(div(u), div(v))*dx
+        # a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx
         return action(a, rhs)
 
 
@@ -306,9 +316,31 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        # a = gamma*inner(cell_avg(div(u)), div(v))*dx
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
+        a = gamma*inner(cell_avg(div(u)), div(v))*dx
+        # a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
         return action(a, rhs)
+    
+    def standard_transfer(self, source, target, mode):
+        if not (source.ufl_shape[0] == 3 and "CG1" in source.ufl_element().shortstr()):
+            return super().standard_transfer(source, target, mode)
+        if True:#not hasattr(self, 'bubbletransfer') or self.bubbletransfer is None:
+            if mode == "prolong":
+                coarse = source
+                fine = target
+            elif mode == "restrict":
+                fine = source
+                coarse = target
+            else:
+                raise NotImplementedError
+            self.bubbletransfer = BubbleTransfer(coarse.function_space(), fine.function_space(), use_change_of_basis=True)
+        if mode == "prolong":
+            self.bubbletransfer.prolong(coarse, fine)
+        elif mode == "restrict":
+            self.bubbletransfer.restrict(fine, coarse)
+        else:
+            raise NotImplementedError
+
+
 
 
 class NullTransfer(object):
