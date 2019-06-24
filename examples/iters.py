@@ -9,8 +9,7 @@ parser.add_argument("--problem", type=str, required=True,
                     choices=["ldc2d", "bfs2d"])
 parser.add_argument("--diagonal", type=str, default="left",
                     choices=["left", "right", "crossed"])
-parser.add_argument("--mesh", type=str, default="coarseA",
-                    choices=["coarseA.msh", "coarseB.msh"])
+parser.add_argument("--mesh", type=str)
 args, _ = parser.parse_known_args()
 
 if args.problem == "ldc2d":
