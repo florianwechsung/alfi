@@ -139,7 +139,7 @@ class NavierStokesSolver(object):
                 return uviss[-1]
         else:
             def visprolong(u):
-                return u.clone(deepcopy=True)
+                return u.copy(deepcopy=True)
 
         self.visprolong = visprolong
 
@@ -149,6 +149,9 @@ class NavierStokesSolver(object):
         size = comm.size
         if comm.rank == 0:
             print("Number of degrees of freedom: %s (avg %.2f per core)" % (Zdim, Zdim / size))
+        Vdim = self.Z.sub(0).dim()
+        if comm.rank == 0:
+            print("Number of velocity degrees of freedom: %s (avg %.2f per core)" % (Vdim, Vdim / size))
         z = Function(Z, name="Solution")
         z.split()[0].rename("Velocity")
         z.split()[1].rename("Pressure")

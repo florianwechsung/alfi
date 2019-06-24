@@ -5,6 +5,8 @@ from alfi import get_default_parser, get_solver, run_solver
 import os
 from firedrake import *
 import numpy as np
+import inflect
+eng = inflect.engine()
 
 convergence_orders = lambda x: np.log2(np.array(x)[:-1] / np.array(x)[1:])
 
@@ -14,17 +16,17 @@ parser.add_argument("--dim", type=int, required=True,
 args, _ = parser.parse_known_args()
 
 if args.dim == 2:
-    problem = TwoDimLidDrivenCavityMMSProblem(args.baseN, Repres=Constant(100))
+    problem = TwoDimLidDrivenCavityMMSProblem(args.baseN)
 elif args.dim == 3:
     problem = ThreeDimLidDrivenCavityMMSProblem(args.baseN)
 else:
     raise NotImplementedError
 
-res = [1, 10, 100, 500, 1000]
+res = [1, 10, 100, 500, 900, 1000]
 results = {}
 for re in res:
     results[re] = {}
-    for s in ["velocity", "pressure", "divergence"]:
+    for s in ["velocity", "pressure", "divergence", "relvelocity", "relpressure"]:
         results[re][s] = []
 comm = None
 hs = []
@@ -53,14 +55,16 @@ for nref in range(1, args.nref+1):
         # File("output/perr-re-%i-nref-%i.pvd" % (re, nref)).write(Function(Z.sub(1)).interpolate(p-p_))
         veldiv = norm(div(u))
         pressureintegral = assemble(p_ * dx)
-        uerr = norm(grad(u_-u))/norm(grad(u_))
-        perr = norm(p_-p)/norm(p_)
+        uerr = norm(grad(u_-u))
+        perr = norm(p_-p)
         pinterp = p.copy(deepcopy=True).interpolate(p_)
         pinterperror = errornorm(p_, pinterp)
         pintegral = assemble(p*dx)
 
         results[re]["velocity"].append(uerr)
         results[re]["pressure"].append(perr)
+        results[re]["relvelocity"].append(uerr/norm(grad(u_)))
+        results[re]["relpressure"].append(perr/norm(p_))
         results[re]["divergence"].append(veldiv)
         if comm.rank == 0:
             print("|div(u_h)| = ", veldiv)
@@ -77,10 +81,11 @@ if comm.rank == 0:
     print("gamma =", args.gamma)
     print("h =", hs)
 
-    for re in res:
+    for re in [10, 100, 1000]:
         print("%%Re = %i" % re)
         print("\\pgfplotstableread[col sep=comma, row sep=\\\\]{%%")
-        print("h,error_v,error_p,div\\\\")
+        print("h,error_v,error_p,relerror_v,relerror_p,div\\\\")
         for i in range(len(hs)):
-            print(",".join(map(str, [hs[i], results[re]["velocity"][i], results[re]["pressure"][i], results[re]["divergence"][i]])) + "\\\\")
-        print("}\\\\re%i" % re)
+            print(",".join(map(str, [hs[i], results[re]["velocity"][i], results[re]["pressure"][i],  results[re]["relvelocity"][i], results[re]["relpressure"][i], results[re]["divergence"][i]])) + "\\\\")
+        name = "re" + eng.number_to_words(re).replace(" ", "").replace("-","") + args.discretisation.replace("0", "zero")
+        print("}\\%s" % name)
