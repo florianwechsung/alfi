@@ -7,7 +7,7 @@ mesh09:
 	gmsh -2 -format msh2 -clscale 0.09 backwards-facing-step.geo -algo front2d -o coarse09.msh -smooth 3
 
 mesh06:
-	gmsh -2 -format msh2 -clscale 0.09 backwards-facing-step.geo -algo front2d -o coarse06.msh -smooth 3
+	gmsh -2 -format msh2 -clscale 0.06 backwards-facing-step.geo -algo front2d -o coarse06.msh -smooth 3
 
 mesh03:
-	gmsh -2 -format msh2 -clscale 0.09 backwards-facing-step.geo -algo front2d -o coarse03.msh -smooth 3
+	gmsh -2 -format msh2 -clscale 0.03 backwards-facing-step.geo -algo front2d -o coarse03.msh -smooth 3
