@@ -1,11 +1,13 @@
-exec=mpirun -n 12 python3
+exec=mpirun -n 4 python3
 pre:
 	mkdir -p logs/
 
 iters2dpkp0: pre
-	#$(exec) iters.py --problem ldc2d --nref 2 --baseN 16         --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star
-	$(exec) iters.py --problem bfs2d --nref 3 --mesh coarse06.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star 2>&1 | tee logs/iters2dbfs06.log
-	$(exec) iters.py --problem bfs2d --nref 3 --mesh coarse06.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --patch-composition multiplicative 2>&1 | tee logs/iters2dbfs06mult.log
+	$(exec) iters.py --problem ldc2d --nref 4 --baseN 16          --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star 2>&1 | tee logs/iters2dldc.log
+	$(exec) iters.py --problem ldc2d --nref 4 --baseN 16          --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --restriction 2>&1 | tee logs/iters2dldcrestrict.log
+	$(exec) iters.py --problem bfs2d --nref 3 --mesh coarse06.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --smoothing 6 --restriction 2>&1 | tee logs/iters2dbfs06addrestrict6.log
+	$(exec) iters.py --problem bfs2d --nref 3 --mesh coarse04.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --smoothing 6 --restriction 2>&1 | tee logs/iters2dbfs04addrestrict6.log
+	$(exec) iters.py --problem bfs2d --nref 3 --mesh coarse03.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --smoothing 6 --restriction 2>&1 | tee logs/iters2dbfs03addrestrict6.log
 
 iters2dsv: pre
 	#$(exec) iters.py --nref 2 --problem ldc2d --k 2 --baseN 10         --solver-type almg --discretisation sv   --mh bary    --stabilisation-type burman --patch macro  2>&1 | tee logs/iters2dsvldc.log
