@@ -38,6 +38,9 @@ def get_default_parser():
                         action="store_true")
     parser.add_argument("--paraview", dest="paraview", default=False,
                         action="store_true")
+    parser.add_argument("--restriction", dest="restriction", default=False,
+                        action="store_true")
+    parser.add_argument("--smoothing", type=int, default=None)
     return parser
 
 
@@ -57,14 +60,16 @@ def get_solver(args, problem):
         supg_method="shakib",
         stabilisation_weight=args.stabilisation_weight,
         hierarchy=args.mh,
-        patch_composition=args.patch_composition
+        patch_composition=args.patch_composition,
+        restriction=args.restriction,
+        smoothing=args.smoothing,
     )
     return solver
 
 def performance_info(comm):
         if comm.rank == 0:
             print(BLUE % "Some performance info:")
-        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restrict", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter"]
+        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter"]
         perf = dict((e, PETSc.Log.Event(e).getPerfInfo()) for e in events)
         perf_reduced = {}
         for k, v in perf.items():

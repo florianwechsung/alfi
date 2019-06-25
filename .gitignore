@@ -4,3 +4,4 @@ alfi/__pycache__/*
 *.vtu
 *.pvd
 *.pvtu
+*.log

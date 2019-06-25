@@ -57,7 +57,7 @@ class NavierStokesSolver(object):
                  stabilisation_type=None,
                  supg_method="shakib", supg_magic=9.0, gamma=10000, nref_vis=1,
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
-                 patch_composition="additive"):
+                 patch_composition="additive", restriction=False, smoothing=None):
 
         assert solver_type in {"almg", "allu", "lu"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
@@ -79,6 +79,8 @@ class NavierStokesSolver(object):
         self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
         self.patch_composition = patch_composition
+        self.restriction = restriction
+        self.smoothing = smoothing
 
 
         def before(dm, i):
@@ -285,11 +287,14 @@ class NavierStokesSolver(object):
             raise NotImplementedError("Need to specify a relaxation_direction in the problem.")
         patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
         patchlu2d = "petsc"
+        if self.smoothing is None:
+            self.smoothing = 10 if self.tdim > 2 else 6
+
 
         mg_levels_solver = {
             "ksp_type": "fgmres",
             "ksp_norm_type": "unpreconditioned",
-            "ksp_max_it": 10 if self.tdim > 2 else 6,
+            "ksp_max_it": self.smoothing,
             "ksp_convergence_test": "skip",
             "pc_type": "python",
             "pc_python_type": "firedrake.PatchPC",
@@ -455,8 +460,15 @@ class ConstantPressureSolver(NavierStokesSolver):
         Q = self.Z.sub(1)
         vtransfer = PkP0SchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
         qtransfer = NullTransfer()
-        self.solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong),#, restrict=vtransfer.restrict),
-                                           dmhooks.transfer_operators(Q, inject=qtransfer.inject))
+        if self.restriction:
+            transfers = [
+                dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict),
+                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
+        else:
+            transfers = [
+                dmhooks.transfer_operators(V, prolong=vtransfer.prolong),
+                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
+        self.solver.set_transfer_operators(*transfers)
 
 
 
@@ -496,6 +508,10 @@ class ScottVogeliusSolver(NavierStokesSolver):
         transfers = [dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
         if self.hierarchy == "bary":
             vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
-            transfers.append(
-                dmhooks.transfer_operators(V, prolong=vtransfer.prolong))#, restrict=vtransfer.restrict))
+            if self.restriction:
+                transfers.append(
+                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
+            else:
+                transfers.append(
+                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
         self.solver.set_transfer_operators(*transfers)

@@ -105,6 +105,7 @@ class OrderedRelaxation(object):
             def keyfunc(z):
                 return tuple(sgn*z[1][ax] for (ax, sgn) in sortdata)
             res.append(keyfunc)
+        return res
 
     def __call__(self, pc):
         dm = pc.getDM()
