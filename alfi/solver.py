@@ -337,7 +337,7 @@ class NavierStokesSolver(object):
         fieldsplit_0_mg = {
             "ksp_type": "richardson",
             "ksp_richardson_self_scale": False,
-            "ksp_max_it": 2,
+            "ksp_max_it": 1,
             "ksp_norm_type": "unpreconditioned",
             "ksp_convergence_test": "skip",
             "pc_type": "mg",
