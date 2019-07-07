@@ -58,7 +58,7 @@ if comm.rank == 0:
         if isinstance(i, str) or isinstance(i, int):
             return str(i)
         return "%.2f" % i
-    print(" \\\\\n".join(["\t& ".join(map(rnd, line)) for line in table]))
+    print(" \\\\\n".join(["\t& ".join(map(rnd, line)) for line in table]) + "\\\\")
 
     table = [["nref", "dofs\t"] + tableres]
     for nref in nrefs:
@@ -68,4 +68,4 @@ if comm.rank == 0:
             avg_ksp_iter = float(results[nref][re]["time"]*60)
             line.append(avg_ksp_iter)
         table.append(line)
-    print(" \\\\\n".join(["\t& ".join(map(rnd, line)) for line in table]))
+    print(" \\\\\n".join(["\t& ".join(map(rnd, line)) for line in table]) + "\\\\")
