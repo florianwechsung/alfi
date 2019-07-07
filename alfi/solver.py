@@ -1,6 +1,7 @@
 from firedrake import *
 from firedrake.petsc import *
 import numpy as np
+from mpi4py import MPI
 
 from alfi.stabilisation import *
 # from alfi.element import velocity_element, pressure_element
@@ -57,7 +58,9 @@ class NavierStokesSolver(object):
                  stabilisation_type=None,
                  supg_method="shakib", supg_magic=9.0, gamma=10000, nref_vis=1,
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
-                 patch_composition="additive", restriction=False, smoothing=None):
+                 patch_composition="additive", restriction=False, smoothing=None,
+                 rebalance_vertices=False,
+                 ):
 
         assert solver_type in {"almg", "allu", "lu"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
@@ -82,6 +85,12 @@ class NavierStokesSolver(object):
         self.restriction = restriction
         self.smoothing = smoothing
 
+        def rebalance(dm, i):
+            if rebalance_vertices:
+                if not dm.rebalanceSharedPoints(useInitialGuess=False, parallel=False):
+                    warning("Vertex rebalancing from scratch failed on level %i" % i)
+                if not dm.rebalanceSharedPoints(useInitialGuess=True, parallel=True):
+                    warning("Vertex rebalancing from initial guess failed on level %i" % i)
 
         def before(dm, i):
             for p in range(*dm.getHeightStratum(1)):
@@ -90,6 +99,7 @@ class NavierStokesSolver(object):
         def after(dm, i):
             for p in range(*dm.getHeightStratum(1)):
                 dm.setLabelValue("prolongation", p, i+2)
+            rebalance(dm, i)
 
         if hierarchy == "bary":
             mh = BaryMeshHierarchy(baseMesh, nref, callbacks=(before, after),
@@ -119,6 +129,7 @@ class NavierStokesSolver(object):
         uviss = []
  
         self.mesh = mesh
+        self.load_balance(mesh)
         Z = self.function_space(mesh, k)
         self.Z = Z
         comm = mesh.mpi_comm()
@@ -418,6 +429,25 @@ class NavierStokesSolver(object):
     def message(self, msg):
         if self.mesh.comm.rank == 0:
             warning(msg)
+
+    def load_balance(self, mesh):
+        Z = FunctionSpace(mesh, "CG", 1)
+        owned_dofs = Z.dof_dset.sizes[1]
+        # if macro patch (i.e. on bary mesh) then subtract the number of
+        # vertices that are new due to the bary refinement.  This number can be
+        # calculated by divding the number of cell on the bary refined mesh by
+        # (tdim+1)
+        if self.patch == "macro":
+            ZZ = FunctionSpace(mesh, "DG", 0)
+            owned_dofs -= ZZ.dof_dset.sizes[1]/(self.tdim+1)
+        comm = Z.mesh().mpi_comm()
+        min_owned_dofs = comm.allreduce(owned_dofs, op=MPI.MIN)
+        mean_owned_dofs = np.mean(comm.allgather(owned_dofs))
+        max_owned_dofs = comm.allreduce(owned_dofs, op=MPI.MAX)
+        self.message(BLUE % ("Load balance: %i vs %i vs %i (%.3f, %.3f)" % (
+            min_owned_dofs, mean_owned_dofs, max_owned_dofs,
+            max_owned_dofs/mean_owned_dofs, max_owned_dofs/min_owned_dofs
+        )))
 
 
 class ConstantPressureSolver(NavierStokesSolver):
