@@ -7,7 +7,7 @@ import os
 
 parser = get_default_parser()
 parser.add_argument("--problem", type=str, required=True,
-                    choices=["ldc2d", "bfs2d"])
+                    choices=["ldc2d", "bfs2d", "ldc3d"])
 parser.add_argument("--diagonal", type=str, default="left",
                     choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str)

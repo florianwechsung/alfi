@@ -4,7 +4,7 @@ NREF=2
 NODES=$((2*8**(${NREF}-1)))
 PROBLEM=ldc3d
 BASEN=18
-JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM --k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg --stabilisation-weight 0.05 --patch star --smoothing 10 --restriction"
+JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM --k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg --stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --rebalance"
 LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES"
 WALLTIME="5:00:00"
 
