@@ -40,6 +40,8 @@ def get_default_parser():
                         action="store_true")
     parser.add_argument("--restriction", dest="restriction", default=False,
                         action="store_true")
+    parser.add_argument("--rebalance", dest="rebalance", default=False,
+                        action="store_true")
     parser.add_argument("--smoothing", type=int, default=None)
     return parser
 
@@ -63,10 +65,11 @@ def get_solver(args, problem):
         patch_composition=args.patch_composition,
         restriction=args.restriction,
         smoothing=args.smoothing,
+        rebalance_vertices=args.rebalance,
     )
     return solver
 
-def performance_info(comm):
+def performance_info(comm, solver):
         if comm.rank == 0:
             print(BLUE % "Some performance info:")
         events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter"]
@@ -81,7 +84,7 @@ def performance_info(comm):
             for k, v in perf_reduced_sorted:
                 print(GREEN % (("%s:" % k).ljust(30) + "Time = % 6.2fs, Time/1kdofs = %.2fs" % (v["time"], 1000*v["time"]/solver.Z.dim())))
             time = perf_reduced_sorted[0][1]["time"]
-            print(BLUE % ("%i \t % 5.1fs \t % 4.2fs \t %i" % (args.nref, time, 1000*time/solver.Z.dim(), solver.Z.dim())))
+            print(BLUE % ("% 5.1fs \t % 4.2fs \t %i" % (time, 1000*time/solver.Z.dim(), solver.Z.dim())))
 
 def run_solver(solver, res, args):
     if args.time:
@@ -116,5 +119,5 @@ def run_solver(solver, res, args):
         for re in results:
             print(results[re])
     if args.time:
-        performance_info(comm)
+        performance_info(comm, solver)
     return results
