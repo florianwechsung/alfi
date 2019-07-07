@@ -13,6 +13,7 @@ parser.add_argument("--diagonal", type=str, default="left",
 parser.add_argument("--mesh", type=str)
 parser.add_argument("--nref-start", type=int)
 parser.add_argument("--nref-end", type=int)
+parser.add_argument("--re-max", type=int)
 args, _ = parser.parse_known_args()
 
 if args.problem == "ldc2d":
@@ -28,6 +29,7 @@ start = 200
 end = 10000
 step = 100
 res = [1, 10, 100] + list(range(start, end+step, step))
+res = [r for r in res if r <= args.re_max]
 if args.problem == "bfs2d":
     res = list(sorted(res + [50, 150, 250, 350]))
 results = {}
