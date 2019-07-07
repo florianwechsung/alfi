@@ -10,6 +10,7 @@ from firedrake.mg.utils import *
 from pyop2.profiling import timed_function
 from alfi.bubble import BubbleTransfer
 
+
 class CoarseCellPatches(object):
     def __call__(self, pc):
         from firedrake.mg.utils import get_level
@@ -22,7 +23,8 @@ class CoarseCellPatches(object):
         (mh, level) = get_level(mf)
 
         coarse_to_fine_cell_map = mh.coarse_to_fine_cells[level-1]
-        (_, firedrake_to_plex) = get_entity_renumbering(dmf, mf._cell_numbering, "cell")
+        (_, firedrake_to_plex) = get_entity_renumbering(
+            dmf, mf._cell_numbering, "cell")
 
         patches = []
         for fine_firedrake in coarse_to_fine_cell_map:
@@ -36,11 +38,14 @@ class CoarseCellPatches(object):
                     if not (value > -1 and value <= level):
                         entities.append(pt)
 
-            iset = PETSc.IS().createGeneral(unique(entities), comm=PETSc.COMM_SELF)
+            iset = PETSc.IS().createGeneral(unique(entities),
+                                            comm=PETSc.COMM_SELF)
             patches.append(iset)
 
-        piterset = PETSc.IS().createStride(size=len(patches), first=0, step=1, comm=PETSc.COMM_SELF)
+        piterset = PETSc.IS().createStride(size=len(patches), first=0, step=1,
+                                           comm=PETSc.COMM_SELF)
         return (patches, piterset)
+
 
 class CoarseCellMacroPatches(object):
     def __call__(self, pc):
@@ -243,6 +248,8 @@ class AutoSchoeberlTransfer(object):
             fine.dat.data[:] = rhs.dat.data_ro - tildeu.dat.data_ro
 
         else:
+            # restrict(rhs, coarse)
+            # return
             # tildeu.assign(fine)
             tildeu.dat.data[:] = fine.dat.data_ro
             bcs.apply(tildeu)
@@ -259,9 +266,10 @@ class AutoSchoeberlTransfer(object):
         
         (nu, gamma) = self.parameters
         def energy_norm(u):
-            return assemble(nu * inner(2*sym(grad(u)), grad(u)) * dx + gamma * inner(div(u), div(u)) * dx)
+            return assemble(nu * inner(2*sym(grad(u)), grad(u)) * dx + gamma * inner(cell_avg(div(u)), div(u)) * dx)
         # if mode == "prolong":
         #     warning("Ratio: %f" % (energy_norm(fine)/energy_norm(coarse)))
+        #     warning("Ratio: %f" % (energy_norm(rhs)/energy_norm(coarse)))
         # def H1_norm(u):
         #     return assemble(1.0/Re * inner(grad(u), grad(u)) * dx)
 
@@ -304,6 +312,11 @@ class SVSchoeberlTransfer(AutoSchoeberlTransfer):
 
 class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.transfers = {}
+
+
     def form(self, parameters, V):
         (nu, gamma) = parameters
         u = TrialFunction(V)
@@ -319,28 +332,30 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         a = gamma*inner(cell_avg(div(u)), div(v))*dx
         # a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
         return action(a, rhs)
-    
+
     def standard_transfer(self, source, target, mode):
-        if not (source.ufl_shape[0] == 3 and "CG1" in source.ufl_element().shortstr()):
+        if not (source.ufl_shape[0] == 3 and
+                "CG1" in source.ufl_element().shortstr()):
             return super().standard_transfer(source, target, mode)
-        if True:#not hasattr(self, 'bubbletransfer') or self.bubbletransfer is None:
-            if mode == "prolong":
-                coarse = source
-                fine = target
-            elif mode == "restrict":
-                fine = source
-                coarse = target
-            else:
-                raise NotImplementedError
-            self.bubbletransfer = BubbleTransfer(coarse.function_space(), fine.function_space(), use_change_of_basis=True)
+
         if mode == "prolong":
-            self.bubbletransfer.prolong(coarse, fine)
+            coarse = source
+            fine = target
         elif mode == "restrict":
-            self.bubbletransfer.restrict(fine, coarse)
+            fine = source
+            coarse = target
         else:
             raise NotImplementedError
-
-
+        (mh, level) = get_level(coarse.ufl_domain())
+        if level not in self.transfers:
+            self.transfers[level] = BubbleTransfer(
+                coarse.function_space(), fine.function_space())
+        if mode == "prolong":
+            self.transfers[level].prolong(coarse, fine)
+        elif mode == "restrict":
+            self.transfers[level].restrict(fine, coarse)
+        else:
+            raise NotImplementedError
 
 
 class NullTransfer(object):
