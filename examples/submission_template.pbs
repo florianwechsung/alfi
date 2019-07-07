@@ -6,8 +6,8 @@
 #PBS -N jobalfi
 #PBS -A e590
 ##PBS -q short
-#PBS -l walltime=20:00:00
-#PBS -l select=8
+#PBS -l walltime=_WALLTIME_
+#PBS -l select=_NODES_
 #PBS -m abe
 #PBS -M wechsung@maths.ox.ac.uk
 
@@ -50,28 +50,12 @@ export XDG_CACHE_HOME=$PBS_O_WORKDIR/.cache
 export TMPDIR=/dev/shm
 export TMP=/dev/shm
 
-NODES=8
+NODES=_NODES_
 PROCS_PER_NODE=24
-PROBLEM_NAME=alfi
-#NREF=2
-#BASEK=1
-#HASH=""
-#SUPG=""
-#PARAVIEW=""
-#FULLCHECKPOINTS=""
 
 # Copy to compute nodes and untar venv
 aprun -n ${NODES} -N 1 /work/e590/e590/fwe590/copy-firedrake.sh
-# Install alfi
-#aprun -n ${NODES} -N 1 sh -c "${FIREDRAKE_DIR}/bin/python3 -m pip install -e /work/e590/e590/fwe590/alfi"
-# Launch job
-#JOB="iters.py --nref 4 --problem ldc2d --k 2 --baseN 10          --solver-type almg --discretisation sv   --mh bary    --stabilisation-type burman --patch macro  --smoothing 6 --restriction --stabilisation-weight 5e-3"
-#LOG="logs/iters2dsvldcrestrict5em3k2.log"
-
-#JOB="iters.py --nref 4 --problem ldc2d --k 2 --baseN 16          --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg   --patch star   --smoothing 6 --restriction"
-#LOG="logs/iters2dsvldccompp2p0restrict.log"
-
-JOB="iters.py --nref 3 --problem bfs2d --k 2 --mesh coarse06.msh --solver-type almg --discretisation sv   --mh bary    --stabilisation-type burman --patch macro  --smoothing 6 --restriction --stabilisation-weight 5e-3"
-LOG="logs/iters2dsvbfs06restrict5em3k2morenodes.log"
-aprun -n $((${NODES} * ${PROCS_PER_NODE})) -N ${PROCS_PER_NODE} sh -c "${FIREDRAKE_DIR}/bin/annotate-output ${FIREDRAKE_DIR}/bin/python3 ${PBS_O_WORKDIR}/${JOB}" 2>&1 | tee $LOG
+JOB="_JOB_"
+LOG="_LOG_"
+aprun -n $((${NODES} * ${PROCS_PER_NODE})) -N ${PROCS_PER_NODE} sh -c "${FIREDRAKE_DIR}/bin/annotate-output ${FIREDRAKE_DIR}/bin/python3 ${PBS_O_WORKDIR}/${JOB}" 2>&1 | tee logs/$LOG.log
 

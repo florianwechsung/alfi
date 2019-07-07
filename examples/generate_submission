@@ -1,0 +1,15 @@
+#!/bin/bash
+
+NREF=2
+NODES=$((2*8**(${NREF}-1)))
+PROBLEM=ldc3d
+JOB="iters.py --nref-start $NREF --nref-end $NREF --problem $PROBLEM --k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg --stabilisation-weight 0.05 --patch star --smoothing 10 --restriction"
+LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES"
+WALLTIME="5:00:00"
+
+cp submission_template.pbs submission_$PROBLEM.pbs
+sed -i "s/_NODES_/$NODES/g" submission_$PROBLEM.pbs
+sed -i "s/_NREF_/$NREF/g" submission_$PROBLEM.pbs
+sed -i "s/_JOB_/$JOB/g" submission_$PROBLEM.pbs
+sed -i "s/_LOG_/$LOG/g" submission_$PROBLEM.pbs
+sed -i "s/_WALLTIME_/$WALLTIME/g" submission_$PROBLEM.pbs
