@@ -285,8 +285,6 @@ class NavierStokesSolver(object):
         multiplicative = self.patch_composition == "multiplicative"
         if multiplicative and self.problem.relaxation_direction() is None:
             raise NotImplementedError("Need to specify a relaxation_direction in the problem.")
-        patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
-        patchlu2d = "petsc"
         if self.smoothing is None:
             self.smoothing = 10 if self.tdim > 2 else 6
 
@@ -300,16 +298,14 @@ class NavierStokesSolver(object):
             "pc_python_type": "firedrake.PatchPC",
             "patch_pc_patch_save_operators": True,
             "patch_pc_patch_partition_of_unity": False,
-            "patch_pc_patch_sub_mat_type": "seqaij" if self.tdim > 2 else "seqdense",
-            "patch_pc_patch_sub_mat_type": "aij",
             "patch_pc_patch_local_type": "multiplicative" if multiplicative else "additive",
             "patch_pc_patch_statistics": False,
             "patch_pc_patch_symmetrise_sweep": multiplicative,
             "patch_pc_patch_precompute_element_tensors": True,
             "patch_sub_ksp_type": "preonly",
             "patch_sub_pc_type": "lu",
-            "patch_sub_pc_factor_mat_solver_type": patchlu3d if self.tdim > 2 else patchlu2d
         }
+        self.configure_patch_solver(mg_levels_solver)
 
         if self.patch == "star":
             if multiplicative:
@@ -470,6 +466,10 @@ class ConstantPressureSolver(NavierStokesSolver):
                 dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
         self.solver.set_transfer_operators(*transfers)
 
+    def configure_patch_solver(self, opts):
+        opts["patch_pc_patch_sub_mat_type"] = "seqdense"
+        opts["patch_sub_pc_factor_mat_solver_type"] = "petsc"
+
 
 
 class ScottVogeliusSolver(NavierStokesSolver):
@@ -515,3 +515,9 @@ class ScottVogeliusSolver(NavierStokesSolver):
                 transfers.append(
                     dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
         self.solver.set_transfer_operators(*transfers)
+
+    def configure_patch_solver(self, opts):
+        patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
+        patchlu2d = "petsc"
+        opts["patch_pc_patch_sub_mat_type"] = "seqaij"
+        opts["patch_sub_pc_factor_mat_solver_type"] = patchlu3d if self.tdim > 2 else patchlu2d
