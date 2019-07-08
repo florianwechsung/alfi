@@ -1,12 +1,29 @@
 #!/bin/bash
+CASE=2
+if [ $CASE=1 ]; then
+    NREF=2
+    NODES=$((2*8**(${NREF}-1)))
+    PROBLEM=ldc3d
+    BASEN=18
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg \
+--stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --rebalance \
+--re-max 5000"
+    LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES"
+    WALLTIME="5:00:00"
+elif [ $CASE=2 ]; then
+    NREF=1
+    NODES=$((2*8**(${NREF}-1)))
+    PROBLEM=ldc3d
+    BASEN=12
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 3 --solver-type almg --discretisation sv --mh bary --stabilisation-type burman \
+--stabilisation-weight 5e-3 --patch macro --smoothing 10 --restriction --rebalance \
+--re-max 5000"
+    LOG="ldc3d-sv-nref-$NREF-nodes-$NODES"
+    WALLTIME="5:00:00"
+fi
 
-NREF=2
-NODES=$((2*8**(${NREF}-1)))
-PROBLEM=ldc3d
-BASEN=18
-JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM --k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg --stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --rebalance"
-LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES"
-WALLTIME="5:00:00"
 
 cp submission_template.pbs submission_$PROBLEM.pbs
 sed -i "s/_NODES_/$NODES/g" submission_$PROBLEM.pbs
