@@ -11,9 +11,9 @@ parser.add_argument("--problem", type=str, required=True,
 parser.add_argument("--diagonal", type=str, default="left",
                     choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str)
-parser.add_argument("--nref-start", type=int)
-parser.add_argument("--nref-end", type=int)
-parser.add_argument("--re-max", type=int)
+parser.add_argument("--nref-start", type=int, required=True)
+parser.add_argument("--nref-end", type=int, required=True)
+parser.add_argument("--re-max", type=int, default=10000)
 args, _ = parser.parse_known_args()
 
 if args.problem == "ldc2d":
