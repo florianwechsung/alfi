@@ -2,9 +2,6 @@ from firedrake import *
 
 class NavierStokesProblem(object):
 
-    # This overlap is a bit too massive!
-    distribution_parameters = {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
-
     def mesh(self, distribution_parameters):
         raise NotImplementedError
 

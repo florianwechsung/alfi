@@ -77,7 +77,7 @@ class NavierStokesSolver(object):
         self.solver_type = solver_type
         self.stabilisation_type = stabilisation_type
         self.patch = patch
-        baseMesh = problem.mesh(problem.distribution_parameters)
+        baseMesh = problem.mesh(self.distribution_parameters())
         self.parallel = baseMesh.comm.size > 1
         self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
@@ -103,14 +103,14 @@ class NavierStokesSolver(object):
 
         if hierarchy == "bary":
             mh = BaryMeshHierarchy(baseMesh, nref, callbacks=(before, after),
-                                   reorder=True, distribution_parameters=problem.distribution_parameters)
+                                   reorder=True, distribution_parameters=self.distribution_parameters())
         elif hierarchy == "uniformbary":
             bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
             mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=problem.distribution_parameters)
+                               distribution_parameters=self.distribution_parameters())
         elif hierarchy == "uniform":
             mh = MeshHierarchy(baseMesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=problem.distribution_parameters)
+                               distribution_parameters=self.distribution_parameters())
         else:
             raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
         self.area = assemble(Constant(1, domain=mh[0])*dx)
