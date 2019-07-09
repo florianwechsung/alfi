@@ -49,5 +49,5 @@ if __name__ == "__main__":
     end = 10000
     step = 250
     res = [0, 1, 10, 100] + list(range(start, end+step, step))
-    res = [1, 10, 100]# + list(range(start, end+step, step))
+    res = [1, 10, 50, 100, 150, 200]# + list(range(start, end+step, step))
     results = run_solver(solver, res, args)
