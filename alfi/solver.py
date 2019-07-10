@@ -532,6 +532,8 @@ class ConstantPressureSolver(NavierStokesSolver):
         opts["patch_pc_patch_sub_mat_type"] = "seqdense"
         opts["patch_sub_pc_factor_mat_solver_type"] = "petsc"
 
+    def distribution_parameters(self):
+        return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 1)}
 
 
 class ScottVogeliusSolver(NavierStokesSolver):
@@ -583,3 +585,6 @@ class ScottVogeliusSolver(NavierStokesSolver):
         patchlu2d = "petsc"
         opts["patch_pc_patch_sub_mat_type"] = "seqaij"
         opts["patch_sub_pc_factor_mat_solver_type"] = patchlu3d if self.tdim > 2 else patchlu2d
+
+    def distribution_parameters(self):
+        return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
