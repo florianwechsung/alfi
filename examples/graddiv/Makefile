@@ -1,3 +1,5 @@
+exec=mpirun -n 4 python3
+
 mesh2dfr:
 	gmsh -2 -clscale 0.15 square.geo -algo front2d -o squarefr.msh
 
@@ -37,3 +39,35 @@ pkp03ddel: mesh3ddel
 
 pkp03dfr: mesh3dfr
 	python3 graddiv.py --nref 1 --k 1 --discretisation pkp0 --dim 3 --mesh cubefr.msh
+
+pkp02dcomparison:
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 2 --dim 2 --smoother patch --transfer 2>&1 | tee    logs/pkp02dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 2 --dim 2 --smoother patch --transfer 2>&1 | tee -a logs/pkp02dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 2 --dim 2 --smoother patch --transfer 2>&1 | tee -a logs/pkp02dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 4 --discretisation pkp0 --k 2 --dim 2 --smoother patch --transfer 2>&1 | tee -a logs/pkp02dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 2 --dim 2 --smoother patch 2>&1 | tee    logs/pkp02dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 2 --dim 2 --smoother patch 2>&1 | tee -a logs/pkp02dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 2 --dim 2 --smoother patch 2>&1 | tee -a logs/pkp02dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 4 --discretisation pkp0 --k 2 --dim 2 --smoother patch 2>&1 | tee -a logs/pkp02dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi --transfer 2>&1 | tee    logs/pkp02dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi --transfer 2>&1 | tee -a logs/pkp02dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi --transfer 2>&1 | tee -a logs/pkp02dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 4 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi --transfer 2>&1 | tee -a logs/pkp02dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi 2>&1 | tee    logs/pkp02dcomparison-jacobi-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi 2>&1 | tee -a logs/pkp02dcomparison-jacobi-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi 2>&1 | tee -a logs/pkp02dcomparison-jacobi-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 4 --discretisation pkp0 --k 2 --dim 2 --smoother jacobi 2>&1 | tee -a logs/pkp02dcomparison-jacobi-notransfer.log
+
+pkp03dcomparison:
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 1 --dim 3 --smoother patch --transfer 2>&1 | tee    logs/pkp03dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 1 --dim 3 --smoother patch --transfer 2>&1 | tee -a logs/pkp03dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 1 --dim 3 --smoother patch --transfer 2>&1 | tee -a logs/pkp03dcomparison-patch-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 1 --dim 3 --smoother patch 2>&1 | tee    logs/pkp03dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 1 --dim 3 --smoother patch 2>&1 | tee -a logs/pkp03dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 1 --dim 3 --smoother patch 2>&1 | tee -a logs/pkp03dcomparison-patch-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi --transfer 2>&1 | tee    logs/pkp03dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi --transfer 2>&1 | tee -a logs/pkp03dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi --transfer 2>&1 | tee -a logs/pkp03dcomparison-jacobi-transfer.log
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi 2>&1 | tee    logs/pkp03dcomparison-jacobi-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi 2>&1 | tee -a logs/pkp03dcomparison-jacobi-notransfer.log
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation pkp0 --k 1 --dim 3 --smoother jacobi 2>&1 | tee -a logs/pkp03dcomparison-jacobi-notransfer.log

@@ -9,8 +9,11 @@ import numpy
 parser = get_default_parser()
 parser.add_argument("--dim", type=int, required=True, choices=[2, 3])
 parser.add_argument("--unstructured", dest="unstructured", default=False, action="store_true")
+parser.add_argument("--transfer", dest="transfer", default=False, action="store_true")
+parser.add_argument("--monitor", dest="monitor", default=False, action="store_true")
 parser.add_argument("--diagonal", type=str, default="left", choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str, default=None)
+parser.add_argument("--smoother", type=str, default=None, required=True, choices=["patch", "jacobi"])
 args, _ = parser.parse_known_args()
 
 distribution_parameters = {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
@@ -22,7 +25,6 @@ gamma = Constant(args.gamma)
 dim = args.dim
 unstructured = args.unstructured
 
-warning("Let's make some meshes.")
 
 if args.mesh is not None:
     warning("Ignoring --baseN, using unstructured Gmsh meshes")
@@ -53,7 +55,6 @@ elif args.mh == "uniform":
                        distribution_parameters=distribution_parameters)
 else:
     raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
-warning("Meshes are ready.")
 
 if args.discretisation == "pkp0" and k < dim:
     Pk = FiniteElement("Lagrange", base.ufl_cell(), k)
@@ -68,7 +69,6 @@ else:
 # eleu = VectorElement(NodalEnrichedElement(Pk, FB))
 # eleu = VectorElement(Pk)
 V = FunctionSpace(mh[-1], eleu)
-warning("Function space ready.")
 
 u = Function(V, name="Solution")
 v = TestFunction(V)
@@ -84,20 +84,16 @@ if args.discretisation == "pkp0":
 else:
     F = inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx - inner(f, v)*dx
 
-warning("Creating Dirichlet boundary condition.")
 bcs = DirichletBC(V, 0, "on_boundary")
-warning("Boundary condition ready.")
 
-sp = {
+common = {
     "mat_type": "aij",
     "snes_type": "ksponly",
-    # "ksp_type": "fgmres",
-    "ksp_type": "fcg",
+    "ksp_type": "fgmres",
     "ksp_rtol": 1e-8,
     "ksp_atol": 0,
-    "ksp_max_it": 1000,
+    "ksp_max_it": 200,
     # "ksp_monitor_true_residual": None,
-    "ksp_converged_reason": None,
     # "ksp_view": None,
     "ksp_norm_type": "unpreconditioned",
     "pc_type": "mg",
@@ -107,55 +103,75 @@ sp = {
     "mg_coarse_pc_type": "python",
     "mg_coarse_pc_python_type": "firedrake.AssembledPC",
     "mg_coarse_assembled_pc_type": "lu",
-    # "mg_coarse_assembled_pc_factor_mat_solver_type": "superlu_dist",
-    "mg_coarse_assembled_pc_factor_mat_solver_type": "petsc",
-    # "mg_levels_ksp_type": "richardson",
-    "mg_levels_ksp_type": "gmres",
-    "mg_levels_ksp_pc_side": "right", # for some reason, gmres with left preconditioning does quite poorly
-    "mg_levels_ksp_max_it": 6 if dim == 3 else 2,
-    "mg_levels_ksp_richardson_scale": 1/(dim+1),
+    "mg_coarse_assembled_pc_factor_mat_solver_type": "superlu_dist",
+    # "mg_coarse_assembled_pc_factor_mat_solver_type": "petsc",
+    "mg_levels_ksp_type": "fgmres",
+    "mg_levels_ksp_max_it": 10 if dim == 3 else 6,
+}
+if args.monitor:
+    common["ksp_converged_reason"] = None
+patch = {
     "mg_levels_pc_type": "python",
     "mg_levels_pc_python_type": "firedrake.PatchPC",
     "mg_levels_patch_pc_patch_save_operators": True,
     "mg_levels_patch_pc_patch_partition_of_unity": False,
-    "mg_levels_patch_pc_patch_sub_mat_type": "seqaij",
-    "mg_levels_patch_pc_patch_sub_mat_type": "aij",
     "mg_levels_patch_pc_patch_multiplicative": False,
     "mg_levels_patch_pc_patch_symmetrise_sweep": False,
     "mg_levels_patch_sub_ksp_type": "preonly",
     "mg_levels_patch_sub_pc_type": "lu",
 }
+
 if args.patch == "macro":
-   sp["mg_levels_patch_pc_patch_construct_type"] = "python"
-   sp["mg_levels_patch_pc_patch_construct_python_type"] = "alfi.MacroStar"
+   patch["mg_levels_patch_pc_patch_construct_type"] = "python"
+   patch["mg_levels_patch_pc_patch_construct_python_type"] = "alfi.MacroStar"
+   patch["mg_levels_patch_pc_patch_sub_mat_type"] = "aij"
+   patch["patch_sub_pc_factor_mat_solver_type"] = "umfpack"
 else:
-   sp["mg_levels_patch_pc_patch_construct_type"] = "star"
-   sp["mg_levels_patch_pc_patch_construct_dim"] = 0
+   patch["mg_levels_patch_pc_patch_construct_type"] = "star"
+   patch["mg_levels_patch_pc_patch_construct_dim"] = 0
+   patch["mg_levels_patch_pc_patch_sub_mat_type"] = "dense"
+
+pointjacobi = {
+    "mg_levels_pc_type": "jacobi",
+}
+if args.smoother == "patch":
+    sp = {**common, **patch}
+elif args.smoother == "jacobi":
+    sp = {**common, **pointjacobi}
+else:
+    raise NotImplementedError
 
 pvd = File("output/output.pvd")
 
-iters = []
-gammas = [0, 1, 1e1, 1e2, 1e4, 1e6, 1e8]
+gammas = [0, 1, 1e1, 1e2, 1e3, 1e4, 1e6, 1e8]
+iters = [">200"] * len(gammas)
 # gammas = [1e2, 1e4, 1e6, 1e8]
-for gamma_ in gammas:
+for i, gamma_ in enumerate(gammas):
     if args.discretisation == "sv":
         vtransfer = SVSchoeberlTransfer((1, gamma), args.dim, args.mh)
     elif args.discretisation == "pkp0":
         vtransfer = PkP0SchoeberlTransfer((1, gamma), args.dim, args.mh)
     gamma.assign(gamma_)
     u.assign(0)
-    warning("Launching solve for gamma = %s." % gamma_)
+    if args.monitor:
+        warning("Launching solve for gamma = %s." % gamma_)
     nvproblem = NonlinearVariationalProblem(F, u, bcs=bcs)
     solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_prefix="")
-    solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
-    # solver.set_transfer_operators(dmhooks.transfer_operators(V, restrict=vtransfer.restrict))
-    # solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
-    solver.solve()
-    iters.append(solver.snes.ksp.getIterationNumber())
+    if args.transfer:
+        solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
+        # solver.set_transfer_operators(dmhooks.transfer_operators(V, restrict=vtransfer.restrict))
+        # solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
+    try:
+        solver.solve()
+    except:
+        break
+
+    iters[i] = solver.snes.ksp.getIterationNumber()
     pvd.write(u)
 def tostr(i):
     return "%.0e" % i
-line = ["Ref", "dofs"] + list(map(tostr, gammas))
-print("&" + "\t&\t".join(line) + "\\\\")
-line = map(str, [args.nref, V.dim()] + iters)
-print("&" + "\t&\t".join(line) + "\\\\")
+if base.comm.rank == 0:
+    line = ["Ref", "dofs"] + list(map(tostr, gammas))
+    print("&" + "\t&\t".join(line) + "\\\\")
+    line = map(str, [args.nref, V.dim()] + iters)
+    print("&" + "\t&\t".join(line) + "\\\\")
