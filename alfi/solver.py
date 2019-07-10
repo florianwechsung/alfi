@@ -62,7 +62,7 @@ class NavierStokesSolver(object):
                  rebalance_vertices=False,
                  ):
 
-        assert solver_type in {"almg", "allu", "lu"}, "Invalid solver type %s" % solver_type
+        assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
             stabilisation_type = None
         assert stabilisation_type in {None, "gls", "supg", "burman"}, "Invalid stabilisation type %s" % stabilisation_type
@@ -77,7 +77,7 @@ class NavierStokesSolver(object):
         self.solver_type = solver_type
         self.stabilisation_type = stabilisation_type
         self.patch = patch
-        baseMesh = problem.mesh(problem.distribution_parameters)
+        baseMesh = problem.mesh(self.distribution_parameters())
         self.parallel = baseMesh.comm.size > 1
         self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
@@ -111,14 +111,14 @@ class NavierStokesSolver(object):
 
         if hierarchy == "bary":
             mh = BaryMeshHierarchy(baseMesh, nref, callbacks=(before, after),
-                                   reorder=True, distribution_parameters=problem.distribution_parameters)
+                                   reorder=True, distribution_parameters=self.distribution_parameters())
         elif hierarchy == "uniformbary":
             bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
             mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=problem.distribution_parameters)
+                               distribution_parameters=self.distribution_parameters())
         elif hierarchy == "uniform":
             mh = MeshHierarchy(baseMesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=problem.distribution_parameters)
+                               distribution_parameters=self.distribution_parameters())
         else:
             raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
         self.area = assemble(Constant(1, domain=mh[0])*dx)
@@ -131,6 +131,9 @@ class NavierStokesSolver(object):
         if not isinstance(gamma, Constant):
             gamma = Constant(gamma)
         self.gamma = gamma
+        if self.solver_type == "simple":
+            self.gamma.assign(0)
+            warning("Setting gamma to 0")
         self.advect = Constant(0)
 
         mesh = mh[-1]
@@ -412,10 +415,34 @@ class NavierStokesSolver(object):
                 "allu": fieldsplit_0_lu,
                 "almg": fieldsplit_0_mg,
                 "alamg": fieldsplit_0_amg,
-                "lu": None}[self.solver_type],
+                "lu": None,
+                "simple": None}[self.solver_type],
             "fieldsplit_1": fieldsplit_1,
         }
 
+        outer_simple = {
+            "mat_type": "nest",
+            "pc_type": "fieldsplit",
+            "pc_fieldsplit_type": "schur",
+            "pc_fieldsplit_schur_factorization_type": "full",
+            "pc_fieldsplit_schur_precondition": "selfp",
+            "fieldsplit_0": {
+                "ksp_type": "richardson",
+                "ksp_richardson_self_scale": False,
+                "ksp_max_it": 1,
+                "ksp_norm_type": "none",
+                "ksp_convergence_test": "skip",
+                "pc_type": "ml",
+                "pc_mg_cycle_type": "v",
+                "pc_mg_type": "full",
+            },
+            "fieldsplit_1": {
+                "ksp_type": "preonly",
+                "pc_type": "ml",
+            },
+            "fieldsplit_1_upper_ksp_type": "preonly",
+            "fieldsplit_1_upper_pc_type": "jacobi",
+        }
         outer_base = {
             "snes_type": "newtonls",
             "snes_linesearch_type": "basic",
@@ -433,9 +460,14 @@ class NavierStokesSolver(object):
             "ksp_converged_reason": None,
         }
 
-        outer = {**outer_base, **outer_lu} if self.solver_type == "lu" else {**outer_base, **outer_fieldsplit}
+        if self.solver_type == "lu":
+            outer = {**outer_base, **outer_lu}
+        elif self.solver_type == "simple": 
+            outer = {**outer_base, **outer_simple}
+        else:
+            outer = {**outer_base, **outer_fieldsplit}
 
-        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl else "baij"
+        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type == "simple" else "baij"
 
         if self.tdim > 2:
             outer["ksp_atol"] = 1.0e-8
