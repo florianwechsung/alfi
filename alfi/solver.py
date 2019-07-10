@@ -87,9 +87,17 @@ class NavierStokesSolver(object):
 
         def rebalance(dm, i):
             if rebalance_vertices:
-                if not dm.rebalanceSharedPoints(useInitialGuess=False, parallel=False):
-                    warning("Vertex rebalancing from scratch failed on level %i" % i)
-                if not dm.rebalanceSharedPoints(useInitialGuess=True, parallel=True):
+                # if not dm.rebalanceSharedPoints(useInitialGuess=False, parallel=False):
+                #     warning("Vertex rebalancing from scratch failed on level %i" % i)
+                # if not dm.rebalanceSharedPoints(useInitialGuess=True, parallel=True):
+                #     warning("Vertex rebalancing from initial guess failed on level %i" % i)
+                try:
+                    dm.rebalanceSharedPoints(useInitialGuess=False, parallel=False)
+                except:
+                    warning("Vertex rebalancing in serial from scratch failed on level %i" % i)
+                try:
+                    dm.rebalanceSharedPoints(useInitialGuess=True, parallel=True)
+                except:
                     warning("Vertex rebalancing from initial guess failed on level %i" % i)
 
         def before(dm, i):
@@ -341,9 +349,14 @@ class NavierStokesSolver(object):
             "ksp_max_it": 1,
             "pc_type": "lu",
             "pc_factor_mat_solver_type": "mkl_pardiso" if self.use_mkl else "mumps",
-            "mat_mumps_icntl_14": 200,
+            "mat_mumps_icntl_14": 150,
         }
 
+        size = self.mesh.mpi_comm().size
+        if size > 24:
+            telescope_factor = round(size/24.0)
+        else:
+            telescope_factor = 1
         fieldsplit_0_mg = {
             "ksp_type": "richardson",
             "ksp_richardson_self_scale": False,
@@ -352,12 +365,18 @@ class NavierStokesSolver(object):
             "ksp_convergence_test": "skip",
             "pc_type": "mg",
             "pc_mg_type": "full",
+            "pc_mg_log": None,
             "mg_levels": mg_levels_solver,
             "mg_coarse_pc_type": "python",
             "mg_coarse_pc_python_type": "firedrake.AssembledPC",
-            "mg_coarse_assembled_pc_type": "lu",
-            "mg_coarse_assembled_pc_factor_mat_solver_type": "mkl_pardiso" if self.use_mkl else "superlu_dist"
-            # "mg_coarse_assembled_pc_factor_mat_solver_type": "mkl_pardiso" if self.use_mkl else "mumps"
+            "mg_coarse_assembled": {
+                "mat_type": "aij",
+                "pc_type": "telescope",
+                "pc_telescope_reduction_factor": telescope_factor,
+                "pc_telescope_subcomm_type": "contiguous",
+                "telescope_pc_type": "lu",
+                "telescope_pc_factor_mat_solver_type": "superlu_dist",
+            }
         }
         fieldsplit_0_amg = {
             "ksp_type": "richardson",
