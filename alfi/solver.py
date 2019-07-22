@@ -60,6 +60,7 @@ class NavierStokesSolver(object):
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
                  patch_composition="additive", restriction=False, smoothing=None,
                  rebalance_vertices=False,
+                 hierarchy_callback=None
                  ):
 
         assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
@@ -77,9 +78,6 @@ class NavierStokesSolver(object):
         self.solver_type = solver_type
         self.stabilisation_type = stabilisation_type
         self.patch = patch
-        baseMesh = problem.mesh(self.distribution_parameters())
-        self.parallel = baseMesh.comm.size > 1
-        self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
         self.patch_composition = patch_composition
         self.restriction = restriction
@@ -109,18 +107,14 @@ class NavierStokesSolver(object):
                 dm.setLabelValue("prolongation", p, i+2)
             rebalance(dm, i)
 
-        if hierarchy == "bary":
-            mh = BaryMeshHierarchy(baseMesh, nref, callbacks=(before, after),
-                                   reorder=True, distribution_parameters=self.distribution_parameters())
-        elif hierarchy == "uniformbary":
-            bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
-            mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=self.distribution_parameters())
-        elif hierarchy == "uniform":
-            mh = MeshHierarchy(baseMesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=self.distribution_parameters())
-        else:
-            raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
+        mh = problem.mesh_hierarchy(hierarchy, nref, (before, after), self.distribution_parameters())
+
+
+        if hierarchy_callback is not None:
+            mh = hierarchy_callback(mh)
+        self.parallel = mh[0].comm.size > 1
+        self.tdim = mh[0].topological_dimension()
+        self.mh = mh
         self.area = assemble(Constant(1, domain=mh[0])*dx)
         nu = Constant(1.0)
         self.nu = nu

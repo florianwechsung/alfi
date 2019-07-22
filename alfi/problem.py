@@ -1,9 +1,27 @@
 from firedrake import *
 
+
 class NavierStokesProblem(object):
 
     def mesh(self, distribution_parameters):
         raise NotImplementedError
+
+    def mesh_hierarchy(self, hierarchy, nref, callbacks, distribution_parameters):
+        baseMesh = self.mesh(distribution_parameters)
+        if hierarchy == "bary":
+            mh = BaryMeshHierarchy(baseMesh, nref, callbacks=callbacks,
+                                   reorder=True, distribution_parameters=distribution_parameters)
+        elif hierarchy == "uniformbary":
+            bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
+            mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=callbacks,
+                               distribution_parameters=distribution_parameters)
+        elif hierarchy == "uniform":
+            mh = MeshHierarchy(baseMesh, nref, reorder=True, callbacks=callbacks,
+                               distribution_parameters=distribution_parameters)
+        else:
+            raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
+        return mh
+
 
     def bcs(self, Z):
         raise NotImplementedError

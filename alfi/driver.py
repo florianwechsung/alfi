@@ -46,7 +46,7 @@ def get_default_parser():
     return parser
 
 
-def get_solver(args, problem):
+def get_solver(args, problem, hierarchy_callback=None):
     solver_t = {"pkp0": ConstantPressureSolver,
                 "sv": ScottVogeliusSolver}[args.discretisation]
     solver = solver_t(
@@ -66,6 +66,7 @@ def get_solver(args, problem):
         restriction=args.restriction,
         smoothing=args.smoothing,
         rebalance_vertices=args.rebalance,
+        hierarchy_callback=hierarchy_callback,
     )
     return solver
 
