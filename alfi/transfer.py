@@ -99,10 +99,8 @@ class AutoSchoeberlTransfer(object):
         self.prev_parameters = {}
         self.force_rebuild_d = {}
         patchparams = {"snes_type": "ksponly",
-                       "ksp_type": "richardson",
-                       # "ksp_type": "preonly",
-                       # "ksp_convergence_test": "skip",
-                       "ksp_norm_type": "unpreconditioned",
+                       "ksp_type": "preonly",
+                       "ksp_convergence_test": "skip",
                        "mat_type": "matfree",
                        "pc_type": "python",
                        "pc_python_type": "firedrake.PatchPC",
