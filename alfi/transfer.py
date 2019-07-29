@@ -158,11 +158,11 @@ class AutoSchoeberlTransfer(object):
 
         return bc
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         a = get_appctx(rhs.function_space().dm).J
         return action(a, rhs)
 
-    def form(self, parameters, V):
+    def form(self, V):
         a = get_appctx(V.dm).J
         return a
 
@@ -207,12 +207,12 @@ class AutoSchoeberlTransfer(object):
 
         if firsttime:
             bcs = self.fix_coarse_boundaries(V)
-            a = self.form(self.parameters, V)
+            a = self.form(V)
             A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"])
 
             tildeu, rhs = Function(V), Function(V)
 
-            bform = self.bform(self.parameters, rhs)
+            bform = self.bform(rhs)
             b = Function(V)
 
             solver = LinearSolver(A, solver_parameters=self.patchparams,
@@ -232,8 +232,8 @@ class AutoSchoeberlTransfer(object):
 
             if self.rebuild(key):
                 A = solver.A
-                a = self.form(self.parameters, V)
-                bform = self.bform(self.parameters, rhs)
+                a = self.form(V)
+                bform = self.bform(rhs)
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
                 A.force_evaluation()
@@ -270,23 +270,12 @@ class AutoSchoeberlTransfer(object):
             rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
             self.standard_transfer(rhs, coarse, "restrict")
 
-        
-        (nu, gamma) = self.parameters
-        def energy_norm(u):
-            return assemble(nu * inner(2*sym(grad(u)), grad(u)) * dx + gamma * inner(cell_avg(div(u)), div(u)) * dx)
-        # if mode == "prolong":
-        #     warning("Ratio: %f" % (energy_norm(fine)/energy_norm(coarse)))
-        #     warning("Ratio: %f" % (energy_norm(rhs)/energy_norm(coarse)))
-        # def H1_norm(u):
-        #     return assemble(1.0/Re * inner(grad(u), grad(u)) * dx)
 
-        # warning("\|coarse\| %.10f " % energy_norm(coarse))
-        # warning("\|coarse\|_1 %f " % H1_norm(coarse))
-        # warning("\|fine\| %.10f" % energy_norm(fine))
-        # warning("\|fine\|_1 %f" % H1_norm(fine))
-        # warning("\|tildeu\| %.10f" % energy_norm(tildeu))
-        # warning("\|rhs\| %.10f" % energy_norm(rhs))
-        # import sys; sys.exit(1)
+        # def energy_norm(u):
+        #     return assemble(action(action(self.form(u.function_space()), u), u))
+        # if mode == "prolong":
+        #     warning("From mesh %i to %i" % (coarse.function_space().dim(), fine.function_space().dim()))
+        #     warning("Energy norm ratio from %.2f to %.2f" % ((energy_norm(rhs)/energy_norm(coarse)), energy_norm(fine)/energy_norm(coarse)))
 
     def standard_transfer(self, source, target, mode):
         if mode == "prolong":
@@ -297,19 +286,18 @@ class AutoSchoeberlTransfer(object):
             raise NotImplementedError
 
 
-
 class SVSchoeberlTransfer(AutoSchoeberlTransfer):
 
-    def form(self, parameters, V):
-        (nu, gamma) = parameters
+    def form(self, V):
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx
         return a
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         V = rhs.function_space()
-        (nu, gamma) = parameters
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = gamma*inner(div(u), div(v))*dx
@@ -324,16 +312,16 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         self.transfers = {}
 
 
-    def form(self, parameters, V):
-        (nu, gamma) = parameters
+    def form(self, V):
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         return a
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         V = rhs.function_space()
-        (nu, gamma) = parameters
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
