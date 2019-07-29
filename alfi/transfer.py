@@ -97,7 +97,7 @@ class AutoSchoeberlTransfer(object):
         self.tensors = {}
         self.parameters = parameters
         self.prev_parameters = {}
-
+        self.force_rebuild_d = {}
         patchparams = {"snes_type": "ksponly",
                        "ksp_type": "richardson",
                        # "ksp_type": "preonly",
@@ -168,7 +168,16 @@ class AutoSchoeberlTransfer(object):
         a = get_appctx(V.dm).J
         return a
 
+    def force_rebuild(self):
+        self.force_rebuild_d = {}
+        for k in self.prev_parameters:
+            self.force_rebuild_d[k] = True
+
     def rebuild(self, key):
+        if key in self.force_rebuild_d and self.force_rebuild_d[key]:
+            self.force_rebuild_d[key] = False
+            warning(RED % ("Rebuild prolongation for key %i" % key))
+            return True
         prev_parameters = self.prev_parameters.get(key, [])
         update = False
         for (prev_param, param) in zip(prev_parameters, self.parameters):
