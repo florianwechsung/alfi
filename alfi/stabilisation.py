@@ -5,7 +5,7 @@ from firedrake.mg.utils import get_level
 
 class Stabilisation(object):
 
-    def __init__(self, V, state=None, h=None, weight=None):
+    def __init__(self, V, state=None, weight=None):
         self.V = V
         self.mesh = V.ufl_domain()
         if state is None:
@@ -14,7 +14,6 @@ class Stabilisation(object):
         else:
             self.wind = state
             self.separate_wind = False
-        self.h = CellSize(self.mesh) if h is None else h
         self.weight = Constant(weight) if weight is not None else None
 
     def update(self, w):
@@ -44,13 +43,15 @@ class Stabilisation(object):
             dm = cdm
             wind = cwind
 
+
 class SUPG(Stabilisation):
 
 
-    def __init__(self, Re, *args, magic=1.0, **kwargs):
+    def __init__(self, Re, *args, magic=1.0, h=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.Re = Re
         self.magic = magic
+        self.h = h or CellSize(self.mesh)
         if self.weight is None:
             tdim = self.mesh.topological_dimension()
             self.weight = Constant(0.1) if tdim == 3 else Constant(1)
@@ -134,21 +135,28 @@ class TurekSUPG(SUPG):
         beta = self.magic * h * 2. * Re_tau / ((w_avg) * (1. + Re_tau))
         return beta
 
+
 class BurmanStabilisation(Stabilisation):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, h=None, **kwargs):
         super().__init__(*args, **kwargs)
         if self.weight is None:
             self.weight = Constant(3e-3) # as chosen in doi:10.1016/j.apnum.2007.11.001
             # stream line diffusion type
             # self.weight = Constant(4e-3) # 
+        if h is None:
+            if self.mesh.topological_dimension() == 3:
+                self.h = FacetArea(self.mesh)**0.5  # go from area to length
+            else:
+                self.h = FacetArea(self.mesh)
+        else:
+            self.h = h
+
 
     def form(self, u, v):
         mesh = self.mesh
         n = FacetNormal(mesh)
-        h = FacetArea(mesh)
-        if mesh.topological_dimension() == 3:
-            h = h**0.5 # go from area to length
+        h = self.h
         # beta = avg(facet_avg(sqrt(dot(self.wind, n)**2+1e-10)))
         beta = avg(facet_avg(sqrt(inner(self.wind, self.wind)+1e-10)))
         return 0.5 * self.weight * h**2 * beta * dot(jump(grad(u), n), jump(grad(v), n))*dS

@@ -7,7 +7,6 @@ from alfi.stabilisation import *
 # from alfi.element import velocity_element, pressure_element
 # from alfi.utilities import coarsen
 from alfi.transfer import *
-from alfi.bary import BaryMeshHierarchy, bary
 
 import pprint
 import sys
@@ -60,6 +59,8 @@ class NavierStokesSolver(object):
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
                  patch_composition="additive", restriction=False, smoothing=None,
                  rebalance_vertices=False,
+                 hierarchy_callback=None,
+                 high_accuracy=False
                  ):
 
         assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
@@ -77,13 +78,11 @@ class NavierStokesSolver(object):
         self.solver_type = solver_type
         self.stabilisation_type = stabilisation_type
         self.patch = patch
-        baseMesh = problem.mesh(self.distribution_parameters())
-        self.parallel = baseMesh.comm.size > 1
-        self.tdim = baseMesh.topological_dimension()
         self.use_mkl = use_mkl
         self.patch_composition = patch_composition
         self.restriction = restriction
         self.smoothing = smoothing
+        self.high_accuracy = high_accuracy
 
         def rebalance(dm, i):
             if rebalance_vertices:
@@ -109,18 +108,14 @@ class NavierStokesSolver(object):
                 dm.setLabelValue("prolongation", p, i+2)
             rebalance(dm, i)
 
-        if hierarchy == "bary":
-            mh = BaryMeshHierarchy(baseMesh, nref, callbacks=(before, after),
-                                   reorder=True, distribution_parameters=self.distribution_parameters())
-        elif hierarchy == "uniformbary":
-            bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
-            mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=self.distribution_parameters())
-        elif hierarchy == "uniform":
-            mh = MeshHierarchy(baseMesh, nref, reorder=True, callbacks=(before, after),
-                               distribution_parameters=self.distribution_parameters())
-        else:
-            raise NotImplementedError("Only know bary, uniformbary and uniform for the hierarchy.")
+        mh = problem.mesh_hierarchy(hierarchy, nref, (before, after), self.distribution_parameters())
+
+
+        if hierarchy_callback is not None:
+            mh = hierarchy_callback(mh)
+        self.parallel = mh[0].comm.size > 1
+        self.tdim = mh[0].topological_dimension()
+        self.mh = mh
         self.area = assemble(Constant(1, domain=mh[0])*dx)
         nu = Constant(1.0)
         self.nu = nu
@@ -244,10 +239,15 @@ class NavierStokesSolver(object):
 
         appctx = {"nu": self.nu, "gamma": self.gamma}
         problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        self.bcs = bcs
+        self.params = params
+        self.nsp = nsp
+        self.appctx = appctx
         self.solver = NonlinearVariationalSolver(problem, solver_parameters=params,
                                                  nullspace=nsp, options_prefix="ns_",
                                                  appctx=appctx)
-        self.set_transfers()
+        self.transfers = self.get_transfers()
+        self.solver.set_transfer_operators(*self.transfers)
         self.check_nograddiv_residual = True
         if self.check_nograddiv_residual:
             self.message(GREEN % "Checking residual without grad-div term")
@@ -450,15 +450,23 @@ class NavierStokesSolver(object):
             "snes_monitor": None,
             "snes_linesearch_monitor": None,
             "snes_converged_reason": None,
-            "snes_rtol": 1.0e-9,
-            "snes_atol": 1.0e-8,
-            "snes_stol": 1.0e-6,
-            "ksp_type": "fgmres",
-            "ksp_rtol": 1.0e-9,
-            "ksp_atol": 1.0e-10,
-            "ksp_monitor_true_residual": None,
-            "ksp_converged_reason": None,
-        }
+        if self.high_accuracy:
+            tolerances = {
+                "snes_rtol": 1.0e-10,
+                "snes_atol": 1.0e-9,
+                "snes_stol": 1.0e-9,
+                "ksp_rtol": 1.0e-11,
+                "ksp_atol": 1.0e-11,
+            }
+        else:
+            tolerances = {
+                "ksp_rtol": 1.0e-9,
+                "ksp_atol": 1.0e-10,
+                "snes_rtol": 1.0e-9,
+                "snes_atol": 1.0e-8,
+                "snes_stol": 1.0e-6,
+            }
+        outer_base = {**outer_base, **tolerances}
 
         if self.solver_type == "lu":
             outer = {**outer_base, **outer_lu}
@@ -480,6 +488,24 @@ class NavierStokesSolver(object):
     def message(self, msg):
         if self.mesh.comm.rank == 0:
             warning(msg)
+
+    def setup_adjoint(self, J):
+        F = self.F
+        self.z_adj = self.z.copy(deepcopy=True)
+        F = replace(F, {F.arguments()[0]: self.z_adj})
+        L = F + J
+        F_adj = derivative(L, self.z)
+        problem = NonlinearVariationalProblem(
+            F_adj, self.z_adj, bcs=homogenize(self.bcs),
+            form_compiler_parameters=self.fcp)
+        solver = NonlinearVariationalSolver(problem, nullspace=self.nsp,
+                                            transpose_nullspace=self.nsp,
+                                            solver_parameters=self.params,
+                                            options_prefix="ns_adj",
+                                            appctx=self.appctx)
+
+        solver.set_transfer_operators(*self.transfers)
+        self.solver_adjoint = solver
 
     def load_balance(self, mesh):
         Z = FunctionSpace(mesh, "CG", 1)
@@ -511,7 +537,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         v, q = TestFunctions(self.Z)
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
-            + self.gamma * inner(cell_avg(div(u)), div(v))*dx
+            + self.gamma * inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
             + self.advect * inner(dot(grad(u), u), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
@@ -532,7 +558,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
 
-    def set_transfers(self):
+    def get_transfers(self):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
         vtransfer = PkP0SchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
@@ -545,7 +571,7 @@ class ConstantPressureSolver(NavierStokesSolver):
             transfers = [
                 dmhooks.transfer_operators(V, prolong=vtransfer.prolong),
                 dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
-        self.solver.set_transfer_operators(*transfers)
+        return transfers
 
     def configure_patch_solver(self, opts):
         opts["patch_pc_patch_sub_mat_type"] = "seqdense"
@@ -579,7 +605,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
 
-    def set_transfers(self):
+    def get_transfers(self):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
         if self.stabilisation_type in ["burman", None]:
@@ -597,7 +623,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
             else:
                 transfers.append(
                     dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
-        self.solver.set_transfer_operators(*transfers)
+        return transfers
 
     def configure_patch_solver(self, opts):
         patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"

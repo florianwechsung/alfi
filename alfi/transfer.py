@@ -97,12 +97,10 @@ class AutoSchoeberlTransfer(object):
         self.tensors = {}
         self.parameters = parameters
         self.prev_parameters = {}
-
+        self.force_rebuild_d = {}
         patchparams = {"snes_type": "ksponly",
-                       "ksp_type": "richardson",
-                       # "ksp_type": "preonly",
-                       # "ksp_convergence_test": "skip",
-                       "ksp_norm_type": "unpreconditioned",
+                       "ksp_type": "preonly",
+                       "ksp_convergence_test": "skip",
                        "mat_type": "matfree",
                        "pc_type": "python",
                        "pc_python_type": "firedrake.PatchPC",
@@ -160,15 +158,24 @@ class AutoSchoeberlTransfer(object):
 
         return bc
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         a = get_appctx(rhs.function_space().dm).J
         return action(a, rhs)
 
-    def form(self, parameters, V):
+    def form(self, V):
         a = get_appctx(V.dm).J
         return a
 
+    def force_rebuild(self):
+        self.force_rebuild_d = {}
+        for k in self.prev_parameters:
+            self.force_rebuild_d[k] = True
+
     def rebuild(self, key):
+        if key in self.force_rebuild_d and self.force_rebuild_d[key]:
+            self.force_rebuild_d[key] = False
+            warning(RED % ("Rebuild prolongation for key %i" % key))
+            return True
         prev_parameters = self.prev_parameters.get(key, [])
         update = False
         for (prev_param, param) in zip(prev_parameters, self.parameters):
@@ -199,17 +206,23 @@ class AutoSchoeberlTransfer(object):
         firsttime = self.bcs.get(key, None) is None
 
         if firsttime:
+            from firedrake.solving_utils import _SNESContext
             bcs = self.fix_coarse_boundaries(V)
-            a = self.form(self.parameters, V)
+            a = self.form(V)
             A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"])
 
             tildeu, rhs = Function(V), Function(V)
 
-            bform = self.bform(self.parameters, rhs)
+            bform = self.bform(rhs)
             b = Function(V)
+            problem = LinearVariationalProblem(a=a, L=0, u=tildeu, bcs=bcs)
+            ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
+                               pmat_type=self.patchparams["mat_type"],
+                               appctx={}, options_prefix="prolongation")
 
             solver = LinearSolver(A, solver_parameters=self.patchparams,
                                   options_prefix="prolongation")
+            solver._ctx = ctx
             self.bcs[key] = bcs
             self.solver[key] = solver
             self.rhs[key] = tildeu, rhs
@@ -225,8 +238,8 @@ class AutoSchoeberlTransfer(object):
 
             if self.rebuild(key):
                 A = solver.A
-                a = self.form(self.parameters, V)
-                bform = self.bform(self.parameters, rhs)
+                a = self.form(V)
+                bform = self.bform(rhs)
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
                 A.force_evaluation()
@@ -240,7 +253,7 @@ class AutoSchoeberlTransfer(object):
             # # solver.solve(tildeu, b)
             # # but that calls a lot of SNES and KSP overhead.
             # # We know we just want to apply the PC:
-            with solver.inserted_options():
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
                 with b.dat.vec_ro as rhsv:
                     with tildeu.dat.vec_wo as x:
                         solver.ksp.pc.apply(rhsv, x)
@@ -253,7 +266,7 @@ class AutoSchoeberlTransfer(object):
             # tildeu.assign(fine)
             tildeu.dat.data[:] = fine.dat.data_ro
             bcs.apply(tildeu)
-            with solver.inserted_options():
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
                 with tildeu.dat.vec_ro as rhsv:
                     with rhs.dat.vec_wo as x:
                         solver.ksp.pc.apply(rhsv, x)
@@ -263,23 +276,12 @@ class AutoSchoeberlTransfer(object):
             rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
             self.standard_transfer(rhs, coarse, "restrict")
 
-        
-        (nu, gamma) = self.parameters
-        def energy_norm(u):
-            return assemble(nu * inner(2*sym(grad(u)), grad(u)) * dx + gamma * inner(cell_avg(div(u)), div(u)) * dx)
-        # if mode == "prolong":
-        #     warning("Ratio: %f" % (energy_norm(fine)/energy_norm(coarse)))
-        #     warning("Ratio: %f" % (energy_norm(rhs)/energy_norm(coarse)))
-        # def H1_norm(u):
-        #     return assemble(1.0/Re * inner(grad(u), grad(u)) * dx)
 
-        # warning("\|coarse\| %.10f " % energy_norm(coarse))
-        # warning("\|coarse\|_1 %f " % H1_norm(coarse))
-        # warning("\|fine\| %.10f" % energy_norm(fine))
-        # warning("\|fine\|_1 %f" % H1_norm(fine))
-        # warning("\|tildeu\| %.10f" % energy_norm(tildeu))
-        # warning("\|rhs\| %.10f" % energy_norm(rhs))
-        # import sys; sys.exit(1)
+        # def energy_norm(u):
+        #     return assemble(action(action(self.form(u.function_space()), u), u))
+        # if mode == "prolong":
+        #     warning("From mesh %i to %i" % (coarse.function_space().dim(), fine.function_space().dim()))
+        #     warning("Energy norm ratio from %.2f to %.2f" % ((energy_norm(rhs)/energy_norm(coarse)), energy_norm(fine)/energy_norm(coarse)))
 
     def standard_transfer(self, source, target, mode):
         if mode == "prolong":
@@ -290,19 +292,18 @@ class AutoSchoeberlTransfer(object):
             raise NotImplementedError
 
 
-
 class SVSchoeberlTransfer(AutoSchoeberlTransfer):
 
-    def form(self, parameters, V):
-        (nu, gamma) = parameters
+    def form(self, V):
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx
         return a
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         V = rhs.function_space()
-        (nu, gamma) = parameters
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
         a = gamma*inner(div(u), div(v))*dx
@@ -317,20 +318,19 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         self.transfers = {}
 
 
-    def form(self, parameters, V):
-        (nu, gamma) = parameters
+    def form(self, V):
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
+        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         return a
 
-    def bform(self, parameters, rhs):
+    def bform(self, rhs):
         V = rhs.function_space()
-        (nu, gamma) = parameters
+        (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = gamma*inner(cell_avg(div(u)), div(v))*dx
-        # a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
+        a = gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         return action(a, rhs)
 
     def standard_transfer(self, source, target, mode):
