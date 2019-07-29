@@ -206,6 +206,7 @@ class AutoSchoeberlTransfer(object):
         firsttime = self.bcs.get(key, None) is None
 
         if firsttime:
+            from firedrake.solving_utils import _SNESContext
             bcs = self.fix_coarse_boundaries(V)
             a = self.form(V)
             A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"])
@@ -214,9 +215,14 @@ class AutoSchoeberlTransfer(object):
 
             bform = self.bform(rhs)
             b = Function(V)
+            problem = LinearVariationalProblem(a=a, L=0, u=tildeu, bcs=bcs)
+            ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
+                               pmat_type=self.patchparams["mat_type"],
+                               appctx={}, options_prefix="prolongation")
 
             solver = LinearSolver(A, solver_parameters=self.patchparams,
                                   options_prefix="prolongation")
+            solver._ctx = ctx
             self.bcs[key] = bcs
             self.solver[key] = solver
             self.rhs[key] = tildeu, rhs
@@ -247,7 +253,7 @@ class AutoSchoeberlTransfer(object):
             # # solver.solve(tildeu, b)
             # # but that calls a lot of SNES and KSP overhead.
             # # We know we just want to apply the PC:
-            with solver.inserted_options():
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
                 with b.dat.vec_ro as rhsv:
                     with tildeu.dat.vec_wo as x:
                         solver.ksp.pc.apply(rhsv, x)
@@ -260,7 +266,7 @@ class AutoSchoeberlTransfer(object):
             # tildeu.assign(fine)
             tildeu.dat.data[:] = fine.dat.data_ro
             bcs.apply(tildeu)
-            with solver.inserted_options():
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
                 with tildeu.dat.vec_ro as rhsv:
                     with rhs.dat.vec_wo as x:
                         solver.ksp.pc.apply(rhsv, x)
