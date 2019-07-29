@@ -328,7 +328,7 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
+        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         return a
 
     def bform(self, parameters, rhs):
@@ -336,8 +336,7 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = gamma*inner(cell_avg(div(u)), div(v))*dx
-        # a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx
+        a = gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         return action(a, rhs)
 
     def standard_transfer(self, source, target, mode):

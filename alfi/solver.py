@@ -505,7 +505,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         v, q = TestFunctions(self.Z)
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
-            + self.gamma * inner(cell_avg(div(u)), div(v))*dx
+            + self.gamma * inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
             + self.advect * inner(dot(grad(u), u), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
