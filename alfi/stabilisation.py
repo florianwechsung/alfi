@@ -43,6 +43,7 @@ class Stabilisation(object):
             dm = cdm
             wind = cwind
 
+
 class SUPG(Stabilisation):
 
 
@@ -50,7 +51,7 @@ class SUPG(Stabilisation):
         super().__init__(*args, **kwargs)
         self.Re = Re
         self.magic = magic
-        self.h = CellSize(self.mesh) if h is None else h
+        self.h = h or CellSize(self.mesh)
         if self.weight is None:
             tdim = self.mesh.topological_dimension()
             self.weight = Constant(0.1) if tdim == 3 else Constant(1)
@@ -143,14 +144,19 @@ class BurmanStabilisation(Stabilisation):
             self.weight = Constant(3e-3) # as chosen in doi:10.1016/j.apnum.2007.11.001
             # stream line diffusion type
             # self.weight = Constant(4e-3) # 
-        self.h = h or FacetArea(self.mesh)
+        if h is None:
+            if self.mesh.topological_dimension() == 3:
+                self.h = FacetArea(self.mesh)**0.5  # go from area to length
+            else:
+                self.h = FacetArea(self.mesh)
+        else:
+            self.h = h
+
 
     def form(self, u, v):
         mesh = self.mesh
         n = FacetNormal(mesh)
-        h = FacetArea(mesh)
-        if mesh.topological_dimension() == 3:
-            h = h**0.5 # go from area to length
+        h = self.h
         # beta = avg(facet_avg(sqrt(dot(self.wind, n)**2+1e-10)))
         beta = avg(facet_avg(sqrt(inner(self.wind, self.wind)+1e-10)))
         return 0.5 * self.weight * h**2 * beta * dot(jump(grad(u), n), jump(grad(v), n))*dS
