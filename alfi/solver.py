@@ -450,6 +450,10 @@ class NavierStokesSolver(object):
             "snes_monitor": None,
             "snes_linesearch_monitor": None,
             "snes_converged_reason": None,
+            "ksp_type": "fgmres",
+            "ksp_monitor_true_residual": None,
+            "ksp_converged_reason": None,
+        }
         if self.high_accuracy:
             tolerances = {
                 "snes_rtol": 1.0e-10,
