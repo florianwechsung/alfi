@@ -237,10 +237,15 @@ class NavierStokesSolver(object):
 
         appctx = {"nu": self.nu, "gamma": self.gamma}
         problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        self.bcs = bcs
+        self.params = params
+        self.nsp = nsp
+        self.appctx = appctx
         self.solver = NonlinearVariationalSolver(problem, solver_parameters=params,
                                                  nullspace=nsp, options_prefix="ns_",
                                                  appctx=appctx)
-        self.set_transfers()
+        self.transfers = self.get_transfers()
+        self.solver.set_transfer_operators(*self.transfers)
         self.check_nograddiv_residual = True
         if self.check_nograddiv_residual:
             self.message(GREEN % "Checking residual without grad-div term")
@@ -474,6 +479,24 @@ class NavierStokesSolver(object):
         if self.mesh.comm.rank == 0:
             warning(msg)
 
+    def setup_adjoint(self, J):
+        F = self.F
+        self.z_adj = self.z.copy(deepcopy=True)
+        F = replace(F, {F.arguments()[0]: self.z_adj})
+        L = F + J
+        F_adj = derivative(L, self.z)
+        problem = NonlinearVariationalProblem(
+            F_adj, self.z_adj, bcs=homogenize(self.bcs),
+            form_compiler_parameters=self.fcp)
+        solver = NonlinearVariationalSolver(problem, nullspace=self.nsp,
+                                            transpose_nullspace=self.nsp,
+                                            solver_parameters=self.params,
+                                            options_prefix="ns_adj",
+                                            appctx=self.appctx)
+
+        solver.set_transfer_operators(*self.transfers)
+        self.solver_adjoint = solver
+
     def load_balance(self, mesh):
         Z = FunctionSpace(mesh, "CG", 1)
         owned_dofs = Z.dof_dset.sizes[1]
@@ -525,7 +548,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
 
-    def set_transfers(self):
+    def get_transfers(self):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
         vtransfer = PkP0SchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
@@ -538,7 +561,7 @@ class ConstantPressureSolver(NavierStokesSolver):
             transfers = [
                 dmhooks.transfer_operators(V, prolong=vtransfer.prolong),
                 dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
-        self.solver.set_transfer_operators(*transfers)
+        return transfers
 
     def configure_patch_solver(self, opts):
         opts["patch_pc_patch_sub_mat_type"] = "seqdense"
@@ -572,7 +595,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
 
-    def set_transfers(self):
+    def get_transfers(self):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
         if self.stabilisation_type in ["burman", None]:
@@ -590,7 +613,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
             else:
                 transfers.append(
                     dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
-        self.solver.set_transfer_operators(*transfers)
+        return transfers
 
     def configure_patch_solver(self, opts):
         patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
