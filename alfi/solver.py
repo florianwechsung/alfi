@@ -59,7 +59,8 @@ class NavierStokesSolver(object):
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
                  patch_composition="additive", restriction=False, smoothing=None,
                  rebalance_vertices=False,
-                 hierarchy_callback=None
+                 hierarchy_callback=None,
+                 high_accuracy=False
                  ):
 
         assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
@@ -81,6 +82,7 @@ class NavierStokesSolver(object):
         self.patch_composition = patch_composition
         self.restriction = restriction
         self.smoothing = smoothing
+        self.high_accuracy = high_accuracy
 
         def rebalance(dm, i):
             if rebalance_vertices:
@@ -448,15 +450,23 @@ class NavierStokesSolver(object):
             "snes_monitor": None,
             "snes_linesearch_monitor": None,
             "snes_converged_reason": None,
-            "snes_rtol": 1.0e-9,
-            "snes_atol": 1.0e-8,
-            "snes_stol": 1.0e-6,
-            "ksp_type": "fgmres",
-            "ksp_rtol": 1.0e-9,
-            "ksp_atol": 1.0e-10,
-            "ksp_monitor_true_residual": None,
-            "ksp_converged_reason": None,
-        }
+        if self.high_accuracy:
+            tolerances = {
+                "snes_rtol": 1.0e-10,
+                "snes_atol": 1.0e-9,
+                "snes_stol": 1.0e-9,
+                "ksp_rtol": 1.0e-11,
+                "ksp_atol": 1.0e-11,
+            }
+        else:
+            tolerances = {
+                "ksp_rtol": 1.0e-9,
+                "ksp_atol": 1.0e-10,
+                "snes_rtol": 1.0e-9,
+                "snes_atol": 1.0e-8,
+                "snes_stol": 1.0e-6,
+            }
+        outer_base = {**outer_base, **tolerances}
 
         if self.solver_type == "lu":
             outer = {**outer_base, **outer_lu}
