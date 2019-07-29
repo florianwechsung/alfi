@@ -500,8 +500,7 @@ class NavierStokesSolver(object):
         L = F + J
         F_adj = derivative(L, self.z)
         problem = NonlinearVariationalProblem(
-            F_adj, self.z_adj, bcs=homogenize(self.bcs),
-            form_compiler_parameters=self.fcp)
+            F_adj, self.z_adj, bcs=homogenize(self.bcs))
         solver = NonlinearVariationalSolver(problem, nullspace=self.nsp,
                                             transpose_nullspace=self.nsp,
                                             solver_parameters=self.params,
