@@ -7,7 +7,6 @@ from alfi.stabilisation import *
 # from alfi.element import velocity_element, pressure_element
 # from alfi.utilities import coarsen
 from alfi.transfer import *
-from alfi.bary import BaryMeshHierarchy, bary
 
 import pprint
 import sys

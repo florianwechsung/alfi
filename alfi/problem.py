@@ -1,4 +1,5 @@
 from firedrake import *
+from alfi.bary import BaryMeshHierarchy, bary
 
 
 class NavierStokesProblem(object):
