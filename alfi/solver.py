@@ -293,7 +293,7 @@ class NavierStokesSolver(object):
         Re_linear_its = self.solver.snes.getLinearSolveIterations()
         Re_nonlinear_its = self.solver.snes.getIterationNumber()
         Re_time = (end-start).total_seconds() / 60
-        self.message(GREEN % ("Time taken: %.2f min in %d iterations (%.2f Krylov iters per Newton step)" % (Re_time, Re_linear_its, Re_linear_its/float(Re_nonlinear_its))))
+        self.message(GREEN % ("Time taken: %.2f min in %d iterations (%.2f Krylov iters per Newton step)" % (Re_time, Re_linear_its, Re_linear_its/max(1, float(Re_nonlinear_its)))))
         info_dict = {
             "Re": re,
             "nu": self.nu.values()[0],
