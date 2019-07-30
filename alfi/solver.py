@@ -209,7 +209,7 @@ class NavierStokesSolver(object):
             if supg_method == "turek":
                 self.stabilisation = TurekSUPG(Re, self.Z.sub(0), state=u, h=problem.mesh_size(u), magic=supg_magic, weight=stabilisation_weight)
             elif supg_method == "shakib":
-                self.stabilisation = ShakibHughesZohanSUPG(1.0/nu, self.Z.sub(0), state=u, h=problem.mesh_size(u), magic=supg_magic, weight=stabilisation_weight)
+                self.stabilisation = ShakibHughesZohanSUPG(1.0/nu, self.Z.sub(0), state=u, h=problem.mesh_size(u, "cell"), magic=supg_magic, weight=stabilisation_weight)
             else:
                 raise NotImplementedError
 
@@ -225,7 +225,7 @@ class NavierStokesSolver(object):
             else:
                 raise NotImplementedError
         elif self.stabilisation_type == "burman":
-            self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u), weight=stabilisation_weight)
+            self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
             self.stabilisation_form = self.stabilisation.form(u, v)
         else:
             self.stabilisation = None
