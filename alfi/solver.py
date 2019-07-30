@@ -566,6 +566,8 @@ class ConstantPressureSolver(NavierStokesSolver):
         Q = self.Z.sub(1)
         vtransfer = PkP0SchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
         qtransfer = NullTransfer()
+        self.vtransfer = vtransfer
+        self.qtransfer = qtransfer
         if self.restriction:
             transfers = [
                 dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict),
@@ -618,6 +620,8 @@ class ScottVogeliusSolver(NavierStokesSolver):
         else:
             raise ValueError("Unknown stabilisation")
         transfers = [dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
+        self.vtransfer = vtransfer
+        self.qtransfer = qtransfer
         if self.hierarchy == "bary":
             vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
             if self.restriction:
