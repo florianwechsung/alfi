@@ -43,7 +43,7 @@ class NavierStokesProblem(object):
     def char_length(self):
         return 1.0
 
-    def mesh_size(self, u):
+    def mesh_size(self, u, domain_type):
         return CellSize(u.ufl_domain())
 
     def rhs(self, Z):

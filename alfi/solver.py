@@ -445,6 +445,7 @@ class NavierStokesSolver(object):
         }
         outer_base = {
             "snes_type": "newtonls",
+            "snes_max_it": 20,
             "snes_linesearch_type": "basic",
             "snes_linesearch_maxstep": 1.0,
             "snes_monitor": None,
@@ -456,20 +457,30 @@ class NavierStokesSolver(object):
         }
         if self.high_accuracy:
             tolerances = {
+                "ksp_rtol": 1.0e-11,
+                "ksp_atol": 1.0e-11,
                 "snes_rtol": 1.0e-10,
                 "snes_atol": 1.0e-9,
                 "snes_stol": 1.0e-9,
-                "ksp_rtol": 1.0e-11,
-                "ksp_atol": 1.0e-11,
             }
         else:
-            tolerances = {
-                "ksp_rtol": 1.0e-9,
-                "ksp_atol": 1.0e-10,
-                "snes_rtol": 1.0e-9,
-                "snes_atol": 1.0e-8,
-                "snes_stol": 1.0e-6,
-            }
+            if self.tdim == 2:
+                tolerances = {
+                    "ksp_rtol": 1.0e-9,
+                    "ksp_atol": 1.0e-10,
+                    "snes_rtol": 1.0e-9,
+                    "snes_atol": 1.0e-8,
+                    "snes_stol": 1.0e-6,
+                }
+            else:
+                tolerances = {
+                    "ksp_rtol": 1.0e-8,
+                    "ksp_atol": 1.0e-8,
+                    "snes_rtol": 1.0e-8,
+                    "snes_atol": 1.0e-8,
+                    "snes_stol": 1.0e-6,
+                }
+
         outer_base = {**outer_base, **tolerances}
 
         if self.solver_type == "lu":
@@ -480,12 +491,6 @@ class NavierStokesSolver(object):
             outer = {**outer_base, **outer_fieldsplit}
 
         parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type == "simple" else "baij"
-
-        if self.tdim > 2:
-            outer["ksp_atol"] = 1.0e-8
-            outer["ksp_rtol"] = 1.0e-8
-            outer["snes_atol"] = outer["ksp_atol"]
-            outer["snes_rtol"] = outer["ksp_rtol"]
 
         return outer
 
