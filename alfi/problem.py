@@ -44,7 +44,12 @@ class NavierStokesProblem(object):
         return 1.0
 
     def mesh_size(self, u, domain_type):
-        return CellSize(u.ufl_domain())
+        mesh = u.ufl_domain()
+        if domain_type == "facet":
+            dim = u.ufl_domain().topological_dimension()
+            return FacetArea(mesh) if dim == 2 else FacetArea(mesh)**0.5
+        elif domain_type == "cell":
+            return CellSize(mesh)
 
     def rhs(self, Z):
         return None

@@ -159,4 +159,4 @@ class BurmanStabilisation(Stabilisation):
         h = self.h
         # beta = avg(facet_avg(sqrt(dot(self.wind, n)**2+1e-10)))
         beta = avg(facet_avg(sqrt(inner(self.wind, self.wind)+1e-10)))
-        return 0.5 * self.weight * h**2 * beta * dot(jump(grad(u), n), jump(grad(v), n))*dS
+        return 0.5 * self.weight * avg(h)**2 * beta * dot(jump(grad(u), n), jump(grad(v), n))*dS
