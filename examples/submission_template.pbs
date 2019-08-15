@@ -7,7 +7,7 @@
 #PBS -A e590
 ##PBS -q short
 #PBS -l walltime=_WALLTIME_
-#PBS -l select=_NODES_
+#PBS -l select=_NODES__MEM_
 #PBS -m abe
 #PBS -M wechsung@maths.ox.ac.uk
 
@@ -51,7 +51,7 @@ export TMPDIR=/dev/shm
 export TMP=/dev/shm
 
 NODES=_NODES_
-PROCS_PER_NODE=24
+PROCS_PER_NODE=_PROCS_PER_NODE_
 
 # Copy to compute nodes and untar venv
 aprun -n ${NODES} -N 1 /work/e590/e590/fwe590/copy-firedrake.sh
