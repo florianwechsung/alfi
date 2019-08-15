@@ -2,12 +2,13 @@ from pprint import pprint
 from ldc2d.ldc2d import TwoDimLidDrivenCavityProblem
 from ldc3d.ldc3d import ThreeDimLidDrivenCavityProblem
 from bfs2d.bfs2d import TwoDimBackwardsFacingStepProblem
+from bfs3d.bfs3d import ThreeDimBackwardsFacingStepProblem
 from alfi import get_default_parser, get_solver, run_solver
 import os
 
 parser = get_default_parser()
 parser.add_argument("--problem", type=str, required=True,
-                    choices=["ldc2d", "bfs2d", "ldc3d"])
+                    choices=["ldc2d", "bfs2d", "ldc3d", "bfs3d"])
 parser.add_argument("--diagonal", type=str, default="left",
                     choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str)
@@ -22,6 +23,8 @@ elif args.problem == "bfs2d":
     problem = TwoDimBackwardsFacingStepProblem(args.mesh)
 elif args.problem == "ldc3d":
     problem = ThreeDimLidDrivenCavityProblem(args.baseN)
+elif args.problem == "bfs3d":
+    problem = ThreeDimBackwardsFacingStepProblem(args.mesh)
 else:
     raise NotImplementedError
 
@@ -30,7 +33,7 @@ end = 10000
 step = 100
 res = [1, 10, 100] + list(range(start, end+step, step))
 res = [r for r in res if r <= args.re_max]
-if args.problem == "bfs2d":
+if args.problem in ["bfs2d", "bfs3d"]:
     res = list(sorted(res + [50, 150, 250, 350]))
 results = {}
 nrefs = range(args.nref_start, args.nref_end+1)
