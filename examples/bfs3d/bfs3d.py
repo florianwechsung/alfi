@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
     parser = get_default_parser()
     parser.add_argument("--mesh", type=str, default="coarse09.msh",
-                        choices=["coarse%i.msh" % i for i in [13, 35, 45]])
+                        choices=["coarse%i.msh" % i for i in [13, 30, 45, 55, 60]])
     args, _ = parser.parse_known_args()
     problem = ThreeDimBackwardsFacingStepProblem(args.mesh)
     solver = get_solver(args, problem)

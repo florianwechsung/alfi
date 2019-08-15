@@ -22,3 +22,11 @@ mms3dpkp0: pre
 mms2dbary: pre
 	$(exec) mms.py --dim 2 --nref 6 --k 2 --discretisation sv   --solver-type almg --mh bary --patch macro --gamma 1e4 --stabilisation-type burman --stabilisation-weight 5e-3 2>&1 | tee logs/mms2dbarysv.log
 	$(exec) mms.py --dim 2 --nref 6 --k 2 --discretisation pkp0 --solver-type almg --mh bary --patch star  --gamma 1e4 --stabilisation-type burman --stabilisation-weight 5e-3 2>&1 | tee logs/mms2dbarypkp0.log
+
+idealal:
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 0 2>&1 | tee logs/idealalgamma0.log || 1
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1 2>&1 | tee logs/idealalgamma1.log || 1
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e1 2>&1 | tee logs/idealalgamma1e1.log || 1
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e2 2>&1 | tee logs/idealalgamma1e2.log || 1
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e3 2>&1 | tee logs/idealalgamma1e3.log || 1
+	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e4 2>&1 | tee logs/idealalgamma1e4.log || 1

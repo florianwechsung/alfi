@@ -35,8 +35,10 @@ if __name__ == "__main__":
 
 
     parser = get_default_parser()
-    parser.add_argument("--mesh", type=str, default="coarseA",
-                        choices=["coarseA.msh", "coarseB.msh"])
+    parser.add_argument("--mesh", type=str, default="coarse09.msh",
+                        choices=["coarse03.msh", "coarse04.msh",
+                                 "coarse06.msh", "coarse09.msh",
+                                 "coarse12.msh"])
     args, _ = parser.parse_known_args()
     problem = TwoDimBackwardsFacingStepProblem(args.mesh)
     solver = get_solver(args, problem)
