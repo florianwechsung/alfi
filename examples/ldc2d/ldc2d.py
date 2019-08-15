@@ -5,12 +5,13 @@ import numpy as np
 
 
 class TwoDimLidDrivenCavityProblem(NavierStokesProblem):
-    def __init__(self, baseN, diagonal=None):
+    def __init__(self, baseN, diagonal=None, regularised=True):
         super().__init__()
         self.baseN = baseN
         if diagonal is None:
             diagonal = "left"
         self.diagonal = diagonal
+        self.regularised = regularised
 
     def mesh(self, distribution_parameters):
         base = RectangleMesh(self.baseN, self.baseN, 2, 2,
@@ -27,7 +28,10 @@ class TwoDimLidDrivenCavityProblem(NavierStokesProblem):
 
     def driver(self, domain):
         (x, y) = SpatialCoordinate(domain)
-        driver = as_vector([x*x*(2-x)*(2-x)*(0.25*y*y), 0])
+        if self.regularised:
+            driver = as_vector([x*x*(2-x)*(2-x)*(0.25*y*y), 0])
+        else:
+            driver = as_vector([(0.25*y*y), 0])
         return driver
 
     def char_length(self): return 2.0

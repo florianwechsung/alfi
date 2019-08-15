@@ -13,7 +13,7 @@ parser.add_argument("--transfer", dest="transfer", default=False, action="store_
 parser.add_argument("--monitor", dest="monitor", default=False, action="store_true")
 parser.add_argument("--diagonal", type=str, default="left", choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str, default=None)
-parser.add_argument("--smoother", type=str, default=None, required=True, choices=["patch", "jacobi"])
+parser.add_argument("--smoother", type=str, default=None, required=True, choices=["patch", "jacobi", "amg"])
 args, _ = parser.parse_known_args()
 
 distribution_parameters = {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
@@ -64,10 +64,6 @@ else:
     Pk = FiniteElement("Lagrange", base.ufl_cell(), k)
     eleu = VectorElement(Pk)
 
-# Pk = FiniteElement("Lagrange", base.ufl_cell(), 3)
-# FB = FiniteElement("FacetBubble", base.ufl_cell(), dim)
-# eleu = VectorElement(NodalEnrichedElement(Pk, FB))
-# eleu = VectorElement(Pk)
 V = FunctionSpace(mh[-1], eleu)
 
 u = Function(V, name="Solution")
@@ -92,10 +88,15 @@ common = {
     "ksp_type": "fgmres",
     "ksp_rtol": 1e-8,
     "ksp_atol": 0,
-    "ksp_max_it": 200,
+    "ksp_max_it": 100,
     # "ksp_monitor_true_residual": None,
     # "ksp_view": None,
     "ksp_norm_type": "unpreconditioned",
+}
+amg = {
+    "pc_type": "hypre"
+}
+gmg = {
     "pc_type": "mg",
     "pc_mg_cycle_type": "w",
     # "pc_mg_type": "full",
@@ -135,32 +136,31 @@ pointjacobi = {
     "mg_levels_pc_type": "jacobi",
 }
 if args.smoother == "patch":
-    sp = {**common, **patch}
+    sp = {**common, **gmg, **patch}
 elif args.smoother == "jacobi":
-    sp = {**common, **pointjacobi}
+    sp = {**common, **gmg, **pointjacobi}
+elif args.smoother == "amg":
+    sp = {**common, **amg}
 else:
     raise NotImplementedError
 
 pvd = File("output/output.pvd")
 
+if args.discretisation == "sv":
+    vtransfer = SVSchoeberlTransfer((1, gamma), args.dim, args.mh)
+elif args.discretisation == "pkp0":
+    vtransfer = PkP0SchoeberlTransfer((1, gamma), args.dim, args.mh)
+nvproblem = NonlinearVariationalProblem(F, u, bcs=bcs)
+solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_prefix="")
+if args.transfer:
+    solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
 gammas = [0, 1, 1e1, 1e2, 1e3, 1e4, 1e6, 1e8]
-iters = [">200"] * len(gammas)
-# gammas = [1e2, 1e4, 1e6, 1e8]
+iters = [">100"] * len(gammas)
 for i, gamma_ in enumerate(gammas):
-    if args.discretisation == "sv":
-        vtransfer = SVSchoeberlTransfer((1, gamma), args.dim, args.mh)
-    elif args.discretisation == "pkp0":
-        vtransfer = PkP0SchoeberlTransfer((1, gamma), args.dim, args.mh)
     gamma.assign(gamma_)
     u.assign(0)
     if args.monitor:
         warning("Launching solve for gamma = %s." % gamma_)
-    nvproblem = NonlinearVariationalProblem(F, u, bcs=bcs)
-    solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_prefix="")
-    if args.transfer:
-        solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
-        # solver.set_transfer_operators(dmhooks.transfer_operators(V, restrict=vtransfer.restrict))
-        # solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
     try:
         solver.solve()
     except:

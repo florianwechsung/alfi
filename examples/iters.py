@@ -14,10 +14,12 @@ parser.add_argument("--mesh", type=str)
 parser.add_argument("--nref-start", type=int, required=True)
 parser.add_argument("--nref-end", type=int, required=True)
 parser.add_argument("--re-max", type=int, default=10000)
+parser.add_argument("--singular", dest="singular", default=False,
+                    action="store_true")
 args, _ = parser.parse_known_args()
 
 if args.problem == "ldc2d":
-    problem = TwoDimLidDrivenCavityProblem(args.baseN, args.diagonal)
+    problem = TwoDimLidDrivenCavityProblem(args.baseN, args.diagonal, regularised=not args.singular)
 elif args.problem == "bfs2d":
     problem = TwoDimBackwardsFacingStepProblem(args.mesh)
 elif args.problem == "ldc3d":

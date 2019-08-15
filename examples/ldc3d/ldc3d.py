@@ -40,7 +40,7 @@ if __name__ == "__main__":
     solver = get_solver(args, problem)
 
     start = 250
-    end = 10000
+    end = 5000
     step = 250
     res = [0, 1, 10, 100] + list(range(start, end+step, step))
     res = [1, 10, 100]  # + list(range(start, end+step, step))

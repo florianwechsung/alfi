@@ -13,11 +13,11 @@ class ThreeDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         self.Re = Re
 
     def mesh(self, distribution_parameters):
-        base = BoxMesh(self.baseN, self.baseN, self.baseN, 2, 2, 2,
-                             distribution_parameters=distribution_parameters)
+        # base = BoxMesh(self.baseN, self.baseN, self.baseN, 2, 2, 2,
+        #                      distribution_parameters=distribution_parameters)
 
-        # base = Mesh(os.path.dirname(os.path.abspath(__file__)) + "/cube.msh",
-        #             distribution_parameters=distribution_parameters)
+        base = Mesh(os.path.dirname(os.path.abspath(__file__)) + "/cube.msh",
+                    distribution_parameters=distribution_parameters)
         
         return base
 
@@ -59,7 +59,6 @@ class ThreeDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         # p = 64 * F2 * (g*ddg-dg**2)
         u = replace(u, {X: 0.5 * X})
         v = replace(v, {X: 0.5 * X})
-        w = replace(w, {X: 0.5 * X})
         p = replace(p, {X: 0.5 * X})
         p = p - 0.125 * assemble(p*dx)
         # u = (1./4.)*(-2 + x)**2 * x**2 * y * (-2 + y**2)

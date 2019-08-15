@@ -22,11 +22,11 @@ elif args.dim == 3:
 else:
     raise NotImplementedError
 
-res = [1, 10, 100, 500, 900, 1000]
+res = [1, 9, 10, 50, 90, 100, 400, 500, 900, 1000]
 results = {}
 for re in res:
     results[re] = {}
-    for s in ["velocity", "pressure", "divergence", "relvelocity", "relpressure"]:
+    for s in ["velocity", "velocitygrad", "pressure", "divergence", "relvelocity", "relvelocitygrad", "relpressure"]:
         results[re][s] = []
 comm = None
 hs = []
@@ -34,8 +34,11 @@ for nref in range(1, args.nref+1):
     args.nref = nref
     solver = get_solver(args, problem)
     mesh = solver.mesh
-    h = Function(FunctionSpace(mesh, "DG", 0)).interpolate(CellSize(mesh)).vector().max()
-    hs.append(h)
+    h = Function(FunctionSpace(mesh, "DG", 0)).interpolate(CellSize(mesh))
+    with h.dat.vec_ro as w:
+        hs.append((w.max()[1], w.sum()/w.getSize()))
+    # h = Function(FunctionSpace(mesh, "DG", 0)).interpolate(CellSize(mesh)).vector().max()
+    # hs.append(h)
     comm = mesh.comm
 
     for re in res:
@@ -55,15 +58,18 @@ for nref in range(1, args.nref+1):
         # File("output/perr-re-%i-nref-%i.pvd" % (re, nref)).write(Function(Z.sub(1)).interpolate(p-p_))
         veldiv = norm(div(u))
         pressureintegral = assemble(p_ * dx)
-        uerr = norm(grad(u_-u))
+        uerr = norm(u_-u)
+        ugraderr = norm(grad(u_-u))
         perr = norm(p_-p)
         pinterp = p.copy(deepcopy=True).interpolate(p_)
         pinterperror = errornorm(p_, pinterp)
         pintegral = assemble(p*dx)
 
         results[re]["velocity"].append(uerr)
+        results[re]["velocitygrad"].append(ugraderr)
         results[re]["pressure"].append(perr)
-        results[re]["relvelocity"].append(uerr/norm(grad(u_)))
+        results[re]["relvelocity"].append(uerr/norm(u_))
+        results[re]["relvelocitygrad"].append(ugraderr/norm(grad(u_)))
         results[re]["relpressure"].append(perr/norm(p_))
         results[re]["divergence"].append(veldiv)
         if comm.rank == 0:
@@ -81,11 +87,15 @@ if comm.rank == 0:
     print("gamma =", args.gamma)
     print("h =", hs)
 
-    for re in [10, 100, 1000]:
+    for re in [10, 100, 500, 1000]:
         print("%%Re = %i" % re)
         print("\\pgfplotstableread[col sep=comma, row sep=\\\\]{%%")
-        print("h,error_v,error_p,relerror_v,relerror_p,div\\\\")
+        print("hmin,havg,error_v,error_vgrad, error_p,relerror_v, relerror_vgrad,relerror_p,div\\\\")
         for i in range(len(hs)):
-            print(",".join(map(str, [hs[i], results[re]["velocity"][i], results[re]["pressure"][i],  results[re]["relvelocity"][i], results[re]["relpressure"][i], results[re]["divergence"][i]])) + "\\\\")
-        name = "re" + eng.number_to_words(re).replace(" ", "").replace("-","") + args.discretisation.replace("0", "zero")
+            print(",".join(map(str, [hs[i][0], hs[i][1], results[re]["velocity"][i], results[re]["velocitygrad"][i], results[re]["pressure"][i], results[re]["relvelocity"][i], results[re]["relvelocitygrad"][i], results[re]["relpressure"][i], results[re]["divergence"][i]])) + "\\\\")
+        def numtoword(num):
+            return eng.number_to_words(num).replace(" ", "").replace("-","")
+        name = "re" + numtoword(int(re)) \
+            + "gamma" + numtoword(int(args.gamma)) \
+            + args.discretisation.replace("0", "zero")
         print("}\\%s" % name)
