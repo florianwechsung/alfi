@@ -457,11 +457,11 @@ class NavierStokesSolver(object):
         }
         if self.high_accuracy:
             tolerances = {
-                "ksp_rtol": 1.0e-11,
-                "ksp_atol": 1.0e-11,
+                "ksp_rtol": 1.0e-12,
+                "ksp_atol": 1.0e-12,
                 "snes_rtol": 1.0e-10,
-                "snes_atol": 1.0e-9,
-                "snes_stol": 1.0e-9,
+                "snes_atol": 1.0e-10,
+                "snes_stol": 1.0e-10,
             }
         else:
             if self.tdim == 2:
