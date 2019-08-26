@@ -200,6 +200,7 @@ class NavierStokesSolver(object):
         self.z_last = z.copy(deepcopy=True)
 
 
+        self.bcs = bcs
         F = self.residual()
 
         """ Stabilisation """
@@ -239,7 +240,6 @@ class NavierStokesSolver(object):
 
         appctx = {"nu": self.nu, "gamma": self.gamma}
         problem = NonlinearVariationalProblem(F, z, bcs=bcs)
-        self.bcs = bcs
         self.params = params
         self.nsp = nsp
         self.appctx = appctx
@@ -247,7 +247,8 @@ class NavierStokesSolver(object):
                                                  nullspace=nsp, options_prefix="ns_",
                                                  appctx=appctx)
         self.transfers = self.get_transfers()
-        self.solver.set_transfer_operators(*self.transfers)
+        if self.transfers is not None and len(self.transfers) > 0:
+            self.solver.set_transfer_operators(*self.transfers)
         self.check_nograddiv_residual = True
         if self.check_nograddiv_residual:
             self.message(GREEN % "Checking residual without grad-div term")
@@ -512,7 +513,8 @@ class NavierStokesSolver(object):
                                             options_prefix="ns_adj",
                                             appctx=self.appctx)
 
-        solver.set_transfer_operators(*self.transfers)
+        if self.transfers is not None and len(self.transfers) > 0:
+            solver.set_transfer_operators(*self.transfers)
         self.solver_adjoint = solver
 
     def load_balance(self, mesh):
@@ -645,3 +647,92 @@ class ScottVogeliusSolver(NavierStokesSolver):
 
     def distribution_parameters(self):
         return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
+
+
+class HdivSolver(NavierStokesSolver):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def residual(self):
+        u, p = split(self.z)
+        v, q = TestFunctions(self.Z)
+        sigma = Constant(10) * self.Z.sub(0).ufl_element().degree()**2
+        h = FacetArea(self.z.ufl_domain())
+        n = FacetNormal(self.z.ufl_domain())
+        ulast = split(self.z_last)[0]
+
+        def a(u, v):
+            return self.nu * inner(2*sym(grad(u)), grad(v))*dx \
+                - self.nu * inner(avg(2*sym(grad(u))), 2*avg(outer(v, n))) * dS \
+                - self.nu * inner(avg(2*sym(grad(v))), 2*avg(outer(u, n))) * dS \
+                + self.nu * sigma/avg(h) * inner(2*avg(outer(u,n)),2*avg(outer(v,n))) * dS
+
+        def a_bc(u, v, bid, g): 
+            nu = self.nu
+            return -inner(outer(v,n),2*nu*sym(grad(u)))*ds(bid) \
+                -inner(outer(u-g,n),2*nu*sym(grad(v)))*ds(bid) \
+                +nu*(sigma/h)*inner(v,u-g)*ds(bid)
+
+        def c(u, v):
+            uflux_int = 0.5*(dot(u, n) + abs(dot(u, n)))*u
+            return -self.advect * dot(u ,div(outer(v,u)))*dx \
+                +self.advect * dot(v('+')-v('-'), uflux_int('+')-uflux_int('-'))*dS
+
+        def c_bc(u, v, bid, g):
+            if g is None:
+                uflux_ext = 0.5*(inner(u,n)+abs(inner(u,n)))*u
+            else:
+                uflux_ext = 0.5*(inner(u,n)+abs(inner(u,n)))*u + 0.5*(inner(u,n)-abs(inner(u,n)))*g
+            return self.advect * dot(v,uflux_ext)*ds(bid)
+
+        def b(u, q):
+            return div(u) * q * dx
+
+        F = a(u, v) + c(u, v) - b(u, q) - b(v, p) + self.gamma * inner(div(u), div(v)) * dx
+
+        exterior_markers = list(self.mesh.exterior_facets.unique_markers)
+        for bc in self.bcs:
+            if "DG" in str(bc._function_space):
+                continue
+            g = bc.function_arg
+            bid = bc.sub_domain
+            exterior_markers.remove(bid)
+            F += a_bc(u, v, bid, g)
+            F += c_bc(u, v, bid, g)
+        for bid in exterior_markers:
+            F += c_bc(u, v, bid, None)
+        return F
+
+    def get_transfers(self):
+        V = self.Z.sub(0)
+        prolongation = EmbeddedDGTransfer(V.ufl_element())
+        return [dmhooks.transfer_operators(V, prolong=prolongation.prolong, inject=prolongation.inject, restrict=prolongation.restrict)]
+
+    def configure_patch_solver(self, opts):
+        opts["patch_pc_patch_sub_mat_type"] = "seqdense"
+        opts["patch_sub_pc_factor_mat_solver_type"] = "petsc"
+        opts["pc_python_type"] = "matpatch.MatPatch"
+
+    def distribution_parameters(self):
+        return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 1)}
+
+
+class RTSolver(HdivSolver):
+
+    def function_space(self, mesh, k):
+        eleu = FiniteElement("RT", mesh.ufl_cell(), k)
+        elep = FiniteElement("Discontinuous Lagrange L2", mesh.ufl_cell(), k-1)
+        V = FunctionSpace(mesh, eleu)
+        Q = FunctionSpace(mesh, elep)
+        return MixedFunctionSpace([V, Q])
+
+
+class BDMSolver(HdivSolver):
+
+    def function_space(self, mesh, k):
+        eleu = FiniteElement("BDM", mesh.ufl_cell(), k)
+        elep = FiniteElement("Discontinuous Lagrange L2", mesh.ufl_cell(), k-1)
+        V = FunctionSpace(mesh, eleu)
+        Q = FunctionSpace(mesh, elep)
+        return MixedFunctionSpace([V, Q])
