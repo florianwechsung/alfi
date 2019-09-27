@@ -242,7 +242,6 @@ class AutoSchoeberlTransfer(object):
                 bform = self.bform(rhs)
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
-                A.force_evaluation()
                 self.prev_parameters[key] = [float(param) for param in self.parameters]
 
         if mode == "prolong":
