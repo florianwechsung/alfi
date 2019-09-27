@@ -127,7 +127,8 @@ if args.patch == "macro":
    patch["mg_levels_patch_pc_patch_construct_type"] = "python"
    patch["mg_levels_patch_pc_patch_construct_python_type"] = "alfi.MacroStar"
    patch["mg_levels_patch_pc_patch_sub_mat_type"] = "aij"
-   patch["patch_sub_pc_factor_mat_solver_type"] = "umfpack"
+   patch["mg_levels_patch_pc_patch_sub_pc_type"] = "lu"
+   patch["mg_levels_patch_sub_pc_factor_mat_solver_type"] = "umfpack"
 else:
    patch["mg_levels_patch_pc_patch_construct_type"] = "star"
    patch["mg_levels_patch_pc_patch_construct_dim"] = 0
