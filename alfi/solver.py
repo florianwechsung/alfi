@@ -22,7 +22,6 @@ class DGMassInv(PCBase):
         u = TrialFunction(V)
         v = TestFunction(V)
         massinv = assemble(Tensor(inner(u, v)*dx).inv)
-        massinv.force_evaluation()
         self.massinv = massinv.petscmat
         self.nu = appctx["nu"]
         self.gamma = appctx["gamma"]
