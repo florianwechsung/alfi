@@ -5,8 +5,8 @@ from alfi import get_default_parser, get_solver, run_solver
 import os
 from firedrake import *
 import numpy as np
-import inflect
-eng = inflect.engine()
+# import inflect
+# eng = inflect.engine()
 
 convergence_orders = lambda x: np.log2(np.array(x)[:-1] / np.array(x)[1:])
 
@@ -22,7 +22,7 @@ elif args.dim == 3:
 else:
     raise NotImplementedError
 
-res = [1, 9, 10, 50, 90, 100, 400, 500, 900, 1000]
+res = [0, 1, 9, 10]#, 50, 90, 100, 400, 500, 900, 1000]
 results = {}
 for re in res:
     results[re] = {}
@@ -49,14 +49,16 @@ for nref in range(1, args.nref+1):
         u, p = z.split()
         Z = z.function_space()
 
-        # uviz = solver.visprolong(u)
-        # (u_, p_) = problem.actual_solution(uviz.function_space())
+        uviz = solver.visprolong(u)
+        (u_, p_) = problem.actual_solution(uviz.function_space())
+        warning("velocity error: %f" % norm(u-u_))
         # File("output/u-re-%i-nref-%i.pvd" % (re, nref)).write(uviz.interpolate(uviz))
-        # File("output/uerr-re-%i-nref-%i.pvd" % (re, nref)).write(uviz.interpolate(uviz-u_))
+        # File("output/uerr-re-%i-nref-%i.pvd" % (re, nref)).write(uviz.project(uviz-u_))
         # File("output/uex-re-%i-nref-%i.pvd" % (re, nref)).write(uviz.interpolate(u_))
         (u_, p_) = problem.actual_solution(Z)
         # File("output/perr-re-%i-nref-%i.pvd" % (re, nref)).write(Function(Z.sub(1)).interpolate(p-p_))
         veldiv = norm(div(u))
+        veldivex = norm(div(u_))
         pressureintegral = assemble(p_ * dx)
         uerr = norm(u_-u)
         ugraderr = norm(grad(u_-u))
@@ -74,9 +76,9 @@ for nref in range(1, args.nref+1):
         results[re]["divergence"].append(veldiv)
         if comm.rank == 0:
             print("|div(u_h)| = ", veldiv)
-            print("p_exact * dx = ", pressureintegral)
-            print("p_approx * dx = ", pintegral)
-
+            print("|div(u)| = ", veldivex)
+            print("p_h * dx = ", pintegral)
+            print("p * dx = ", pressureintegral)
 if comm.rank == 0:
     for re in res:
         print("Results for Re =", re)
@@ -86,6 +88,7 @@ if comm.rank == 0:
         print("convergence orders:", convergence_orders(results[re]["pressure"]))
     print("gamma =", args.gamma)
     print("h =", hs)
+    import sys; sys.exit()
 
     for re in [10, 100, 500, 1000]:
         print("%%Re = %i" % re)

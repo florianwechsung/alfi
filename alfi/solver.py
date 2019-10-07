@@ -319,6 +319,7 @@ class NavierStokesSolver(object):
             "ksp_convergence_test": "skip",
             "pc_type": "python",
             "pc_python_type": "firedrake.PatchPC",
+            # "pc_python_type": "matpatch.MatPatch",
             "patch_pc_patch_save_operators": True,
             "patch_pc_patch_partition_of_unity": False,
             "patch_pc_patch_local_type": "multiplicative" if multiplicative else "additive",
@@ -722,7 +723,7 @@ class RTSolver(HdivSolver):
 
     def function_space(self, mesh, k):
         eleu = FiniteElement("RT", mesh.ufl_cell(), k)
-        elep = FiniteElement("Discontinuous Lagrange L2", mesh.ufl_cell(), k-1)
+        elep = FiniteElement("Discontinuous Lagrange", mesh.ufl_cell(), k-1)
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
@@ -732,7 +733,7 @@ class BDMSolver(HdivSolver):
 
     def function_space(self, mesh, k):
         eleu = FiniteElement("BDM", mesh.ufl_cell(), k)
-        elep = FiniteElement("Discontinuous Lagrange L2", mesh.ufl_cell(), k-1)
+        elep = FiniteElement("Discontinuous Lagrange", mesh.ufl_cell(), k-1)
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
