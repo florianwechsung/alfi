@@ -585,6 +585,7 @@ class ConstantPressureSolver(NavierStokesSolver):
     def configure_patch_solver(self, opts):
         opts["patch_pc_patch_sub_mat_type"] = "seqdense"
         opts["patch_sub_pc_factor_mat_solver_type"] = "petsc"
+        opts["patch_pc_patch_dense_inverse"] = True
 
     def distribution_parameters(self):
         return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 1)}
