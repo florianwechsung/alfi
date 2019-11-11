@@ -14,7 +14,7 @@ from alfi.bubble import BubbleTransfer
 class CoarseCellPatches(object):
     def __call__(self, pc):
         from firedrake.mg.utils import get_level
-        from firedrake.mg.impl import get_entity_renumbering
+        from firedrake.cython.mgimpl import get_entity_renumbering
 
         dmf = pc.getDM()
         ctx = pc.getAttr("ctx")
@@ -50,7 +50,7 @@ class CoarseCellPatches(object):
 class CoarseCellMacroPatches(object):
     def __call__(self, pc):
         from firedrake.mg.utils import get_level
-        from firedrake.mg.impl import get_entity_renumbering
+        from firedrake.cython.mgimpl import get_entity_renumbering
 
         dmf = pc.getDM()
         ctx = pc.getAttr("ctx")
