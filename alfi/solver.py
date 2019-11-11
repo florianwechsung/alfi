@@ -62,7 +62,7 @@ class NavierStokesSolver(object):
                  high_accuracy=False
                  ):
 
-        assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
+        assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
             stabilisation_type = None
         assert stabilisation_type in {None, "gls", "supg", "burman"}, "Invalid stabilisation type %s" % stabilisation_type
@@ -125,7 +125,7 @@ class NavierStokesSolver(object):
         if not isinstance(gamma, Constant):
             gamma = Constant(gamma)
         self.gamma = gamma
-        if self.solver_type == "simple":
+        if self.solver_type in ["simple", "lsc"]:
             self.gamma.assign(0)
             warning("Setting gamma to 0")
         self.advect = Constant(0)
@@ -415,7 +415,8 @@ class NavierStokesSolver(object):
                 "almg": fieldsplit_0_mg,
                 "alamg": fieldsplit_0_amg,
                 "lu": None,
-                "simple": None}[self.solver_type],
+                "simple": None,
+                "lsc": None}[self.solver_type],
             "fieldsplit_1": fieldsplit_1,
         }
 
@@ -442,6 +443,23 @@ class NavierStokesSolver(object):
             "fieldsplit_1_upper_ksp_type": "preonly",
             "fieldsplit_1_upper_pc_type": "jacobi",
         }
+
+        outer_lsc = {
+            "mat_type": "nest",
+            "pc_type": "fieldsplit",
+            "pc_fieldsplit_detect_saddle_point": None,
+            "pc_fieldsplit_type": "schur",
+            "pc_fieldsplit_schur_fact_type": "full",
+            "pc_fieldsplit_schur_precondition": "self",
+            "fieldsplit_0_ksp_type": "preonly",
+            "fieldsplit_0_pc_type": "hypre",
+
+            "fieldsplit_1_ksp_type": "preonly",
+            "fieldsplit_1_pc_type": "lsc",
+            "fieldsplit_1_lsc_pc_type": "hypre",
+            "fieldsplit_1_lsc_ksp_type": "preonly",
+        }
+
         outer_base = {
             "snes_type": "newtonls",
             "snes_max_it": 20,
@@ -486,10 +504,12 @@ class NavierStokesSolver(object):
             outer = {**outer_base, **outer_lu}
         elif self.solver_type == "simple": 
             outer = {**outer_base, **outer_simple}
+        elif self.solver_type == "lsc":
+            outer = {**outer_base, **outer_lsc}
         else:
             outer = {**outer_base, **outer_fieldsplit}
 
-        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type == "simple" else "baij"
+        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type in ["simple", "lsc"] else "baij"
 
         return outer
 
