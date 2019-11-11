@@ -85,10 +85,10 @@ bcs = DirichletBC(V, 0, "on_boundary")
 common = {
     "mat_type": "aij",
     "snes_type": "ksponly",
-    "ksp_type": "fgmres",
+    "ksp_type": "cg",
     "ksp_rtol": 1e-8,
     "ksp_atol": 0,
-    "ksp_max_it": 100,
+    "ksp_max_it": 200,
     # "ksp_monitor_true_residual": None,
     # "ksp_view": None,
     "ksp_norm_type": "unpreconditioned",
@@ -106,11 +106,12 @@ gmg = {
     "mg_coarse_assembled_pc_type": "lu",
     "mg_coarse_assembled_pc_factor_mat_solver_type": "superlu_dist",
     # "mg_coarse_assembled_pc_factor_mat_solver_type": "petsc",
-    "mg_levels_ksp_type": "fgmres",
-    "mg_levels_ksp_max_it": 10 if dim == 3 else 6,
+    "mg_levels_ksp_type": "chebyshev",
+    "mg_levels_ksp_max_it": 2,
 }
 if args.monitor:
     common["ksp_converged_reason"] = None
+    common["ksp_monitor_true_residual"] = None
 patch = {
     "mg_levels_pc_type": "python",
     "mg_levels_pc_python_type": "firedrake.PatchPC",
@@ -126,7 +127,8 @@ if args.patch == "macro":
    patch["mg_levels_patch_pc_patch_construct_type"] = "python"
    patch["mg_levels_patch_pc_patch_construct_python_type"] = "alfi.MacroStar"
    patch["mg_levels_patch_pc_patch_sub_mat_type"] = "aij"
-   patch["patch_sub_pc_factor_mat_solver_type"] = "umfpack"
+   patch["mg_levels_patch_pc_patch_sub_pc_type"] = "lu"
+   patch["mg_levels_patch_sub_pc_factor_mat_solver_type"] = "umfpack"
 else:
    patch["mg_levels_patch_pc_patch_construct_type"] = "star"
    patch["mg_levels_patch_pc_patch_construct_dim"] = 0
@@ -155,7 +157,7 @@ solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_pre
 if args.transfer:
     solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
 gammas = [0, 1, 1e1, 1e2, 1e3, 1e4, 1e6, 1e8]
-iters = [">100"] * len(gammas)
+iters = [">200"] * len(gammas)
 for i, gamma_ in enumerate(gammas):
     gamma.assign(gamma_)
     u.assign(0)

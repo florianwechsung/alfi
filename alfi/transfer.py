@@ -14,7 +14,7 @@ from alfi.bubble import BubbleTransfer
 class CoarseCellPatches(object):
     def __call__(self, pc):
         from firedrake.mg.utils import get_level
-        from firedrake.mg.impl import get_entity_renumbering
+        from firedrake.cython.mgimpl import get_entity_renumbering
 
         dmf = pc.getDM()
         ctx = pc.getAttr("ctx")
@@ -50,7 +50,7 @@ class CoarseCellPatches(object):
 class CoarseCellMacroPatches(object):
     def __call__(self, pc):
         from firedrake.mg.utils import get_level
-        from firedrake.mg.impl import get_entity_renumbering
+        from firedrake.cython.mgimpl import get_entity_renumbering
 
         dmf = pc.getDM()
         ctx = pc.getAttr("ctx")
@@ -242,7 +242,6 @@ class AutoSchoeberlTransfer(object):
                 bform = self.bform(rhs)
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
-                A.force_evaluation()
                 self.prev_parameters[key] = [float(param) for param in self.parameters]
 
         if mode == "prolong":

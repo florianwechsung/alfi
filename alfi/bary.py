@@ -3,7 +3,7 @@ import firedrake
 from pyop2.datatypes import IntType
 from mpi4py import MPI
 from fractions import Fraction
-from firedrake.mg import impl
+from firedrake.cython import mgimpl as impl
 from firedrake.petsc import *
 import numpy
 
