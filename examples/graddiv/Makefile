@@ -1,4 +1,4 @@
-exec=mpiexec -n 6 python3
+exec=mpiexec -n 4 python3
 
 pkp02dcomparison:
 	mkdir -p logs
@@ -81,3 +81,28 @@ sv3dcomparison:
 	$(exec) graddiv.py --baseN 2 --nref 1 --discretisation sv --k 3 --dim 3 --mh bary --patch macro --smoother jacobi 2>&1 | tee    logs/sv3dcomparison-jacobi-notransfer.log
 	$(exec) graddiv.py --baseN 2 --nref 2 --discretisation sv --k 3 --dim 3 --mh bary --patch macro --smoother jacobi 2>&1 | tee -a logs/sv3dcomparison-jacobi-notransfer.log
 	$(exec) graddiv.py --baseN 2 --nref 3 --discretisation sv --k 3 --dim 3 --mh bary --patch macro --smoother jacobi 2>&1 | tee -a logs/sv3dcomparison-jacobi-notransfer.log
+
+talksv2dcomparison:
+	mkdir -p logs
+	$(exec) graddiv.py --baseN 4  --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	$(exec) graddiv.py --baseN 8  --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	$(exec) graddiv.py --baseN 16 --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	#
+	$(exec) graddiv.py --baseN 4 --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother jacobi
+	#
+	$(exec) graddiv.py --baseN 4  --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	$(exec) graddiv.py --baseN 8  --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	$(exec) graddiv.py --baseN 16 --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	#
+	$(exec) graddiv.py --baseN 4 --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch
+	#
+	$(exec) graddiv.py --baseN 4 --nref 0 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch --transfer
+	$(exec) graddiv.py --baseN 4 --nref 1 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch --transfer
+	$(exec) graddiv.py --baseN 4 --nref 2 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch --transfer
+	$(exec) graddiv.py --baseN 4 --nref 3 --discretisation sv --k 2 --dim 2 --mh bary --patch macro --smoother patch --transfer
