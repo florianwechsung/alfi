@@ -163,6 +163,8 @@ def bary(cdm):
                 new_cell_cone_orientation = [0, 0, -2]
                 rdm.setCone(new_cell, new_cell_cone)
                 rdm.setConeOrientation(new_cell, new_cell_cone_orientation)
+                copy_label("Cell Sets", new_cell, cdm_cell)
+
         elif dim == 3:
             for (old_facet, new_cell) in zip(cdm_cell_facets, new_cells):
                 old_facet_in_new_numbering = old_facet - cdm_facets[0] + rdm_facets[0]
@@ -226,7 +228,7 @@ def bary(cdm):
                                 forward = False
                             else:
                                 forward = True
-                        elif edges_orientation[i] == 0: 
+                        elif edges_orientation[i] == 0:
                             if start >= 0:
                                 forward = True
                             else:
@@ -320,7 +322,7 @@ def bary(cdm):
 
 
 
-                # This is a check to make sure that the vertices of the facet are visited in the right order 
+                # This is a check to make sure that the vertices of the facet are visited in the right order
                 if False:
                     should_be = [[0, 1, 2], [0, 3, 1], [0, 2, 3], [2, 1, 3]]
                     for i in range(4):
@@ -335,6 +337,8 @@ def bary(cdm):
                 #print("Introducing new cell %d -> %s with orientation %s" % (new_cell, new_cell_cone, new_cell_cone_orientation))
                 rdm.setCone(new_cell, new_cell_cone)
                 rdm.setConeOrientation(new_cell, new_cell_cone_orientation)
+
+                copy_label("Cell Sets", new_cell, cdm_cell)
 
     rdm.symmetrize()
     rdm.stratify()
@@ -426,7 +430,7 @@ def bary(cdm):
     tmp.bcastBegin(MPI.INT, old_to_new_points, new_remote)
     tmp.bcastEnd(MPI.INT, old_to_new_points, new_remote)
     tmp.destroy()
-    
+
     for i, point in enumerate(local):
         if cStart <= point < cEnd:
             for p in range(point*(dim+1), (point+1)*(dim+1)):
