@@ -245,8 +245,8 @@ class NavierStokesSolver(object):
         self.solver = NonlinearVariationalSolver(problem, solver_parameters=params,
                                                  nullspace=nsp, options_prefix="ns_",
                                                  appctx=appctx)
-        self.transfers = self.get_transfers()
-        self.solver.set_transfer_operators(*self.transfers)
+        self.transfermanager = TransferManager(native_transfers=self.get_transfers())
+        self.solver.set_transfer_manager(self.transfermanager)
         self.check_nograddiv_residual = True
         if self.check_nograddiv_residual:
             self.message(GREEN % "Checking residual without grad-div term")
@@ -531,7 +531,7 @@ class NavierStokesSolver(object):
                                             options_prefix="ns_adj",
                                             appctx=self.appctx)
 
-        solver.set_transfer_operators(*self.transfers)
+        solver.set_transfer_manager(self.transfermanager)
         self.solver_adjoint = solver
 
     def load_balance(self, mesh):
@@ -592,14 +592,8 @@ class ConstantPressureSolver(NavierStokesSolver):
         qtransfer = NullTransfer()
         self.vtransfer = vtransfer
         self.qtransfer = qtransfer
-        if self.restriction:
-            transfers = [
-                dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict),
-                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
-        else:
-            transfers = [
-                dmhooks.transfer_operators(V, prolong=vtransfer.prolong),
-                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
+        transfers = {V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+                     Q.ufl_element(): (prolong, restrict, qtransfer.inject)}
         return transfers
 
     def configure_patch_solver(self, opts):
@@ -644,17 +638,18 @@ class ScottVogeliusSolver(NavierStokesSolver):
             qtransfer = EmbeddedDGTransfer(V.ufl_element())
         else:
             raise ValueError("Unknown stabilisation")
-        transfers = [dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
         self.qtransfer = qtransfer
         if self.hierarchy == "bary":
             vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
             self.vtransfer = vtransfer
-            if self.restriction:
-                transfers.append(
-                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
-            else:
-                transfers.append(
-                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
+            transfers = {
+                V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
+        else:
+            transfers = {
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
         return transfers
 
     def configure_patch_solver(self, opts):
