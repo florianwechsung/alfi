@@ -155,7 +155,8 @@ elif args.discretisation == "pkp0":
 nvproblem = NonlinearVariationalProblem(F, u, bcs=bcs)
 solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_prefix="")
 if args.transfer:
-    solver.set_transfer_operators(dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
+    transfer = TransferManager(native_transfers={V.ufl_element(): (vtransfer.prolong, vtransfer.restrict, inject)})
+    solver.set_transfer_manager(transfer)
 gammas = [0, 1, 1e1, 1e2, 1e3, 1e4, 1e6, 1e8]
 iters = [">200"] * len(gammas)
 for i, gamma_ in enumerate(gammas):
