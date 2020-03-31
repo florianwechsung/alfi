@@ -660,3 +660,23 @@ class ScottVogeliusSolver(NavierStokesSolver):
 
     def distribution_parameters(self):
         return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
+
+
+class TaylorHoodSolver(ScottVogeliusSolver):
+
+    def __init__(self, *args, **kwargs):
+        warning(
+            """Using Taylor-Hood element. Note that since we can't do """
+            """projection to the pressure space cheaply we are doing the same """
+            """thing as for Scott-Vogelius (i.e. grad-div stabilisation) which """
+            """changes the solution to the discrete system. For this reason """
+            """gamma should be chosen moderately."""
+        )
+        super().__init__(*args, **kwargs)
+
+    def function_space(self, mesh, k):
+        eleu = VectorElement("Lagrange", mesh.ufl_cell(), k)
+        elep = FiniteElement("Lagrange", mesh.ufl_cell(), k-1)
+        V = FunctionSpace(mesh, eleu)
+        Q = FunctionSpace(mesh, elep)
+        return MixedFunctionSpace([V, Q])
