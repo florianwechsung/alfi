@@ -65,7 +65,7 @@ class NavierStokesSolver(object):
         assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
             stabilisation_type = None
-        assert stabilisation_type in {None, "gls", "supg", "burman"}, "Invalid stabilisation type %s" % stabilisation_type
+        assert stabilisation_type in {None, "gls", "supg", "burman", "bbg"}, "Invalid stabilisation type %s" % stabilisation_type
         assert hierarchy in {"uniform", "bary", "uniformbary"}, "Invalid hierarchy type %s" % hierarchy
         assert patch in {"macro", "star"}, "Invalid patch type %s" % patch
         if hierarchy != "bary" and patch == "macro":
@@ -225,6 +225,9 @@ class NavierStokesSolver(object):
                 raise NotImplementedError
         elif self.stabilisation_type == "burman":
             self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
+            self.stabilisation_form = self.stabilisation.form(u, v)
+        elif self.stabilisation_type == "bbg":
+            self.stabilisation = BarrenecheaBurmanGuzman(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
             self.stabilisation_form = self.stabilisation.form(u, v)
         else:
             self.stabilisation = None
@@ -632,7 +635,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
     def get_transfers(self):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
-        if self.stabilisation_type in ["burman", None]:
+        if self.stabilisation_type in ["bbg", "burman", None]:
             qtransfer = NullTransfer()
         elif self.stabilisation_type in ["gls", "supg"]:
             qtransfer = EmbeddedDGTransfer(V.ufl_element())

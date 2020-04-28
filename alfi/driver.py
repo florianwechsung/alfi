@@ -24,7 +24,7 @@ def get_default_parser():
     parser.add_argument("--mh", type=str, default="uniform",
                         choices=["uniform", "bary", "uniformbary"])
     parser.add_argument("--stabilisation-type", type=str, default=None,
-                        choices=["none", "burman", "gls", "supg"])
+                        choices=["none", "burman", "gls", "supg", "bbg"])
     parser.add_argument("--discretisation", type=str, required=True,
                         choices=["pkp0", "sv"])
     parser.add_argument("--gamma", type=float, default=1e4)

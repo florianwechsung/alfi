@@ -160,3 +160,21 @@ class BurmanStabilisation(Stabilisation):
         # beta = avg(facet_avg(sqrt(dot(self.wind, n)**2+1e-10)))
         beta = avg(facet_avg(sqrt(inner(self.wind, self.wind)+1e-10)))
         return 0.5 * self.weight * avg(h)**2 * beta * dot(jump(grad(u), n), jump(grad(v), n))*dS
+
+
+class BarrenecheaBurmanGuzman(BurmanStabilisation):
+    def __init__(self, *args, h=None, **kwargs):
+        super().__init__(*args, h=h, **kwargs)
+        print("Using weight %s" % float(self.weight))
+
+    def form(self, u, v):
+        mesh = self.mesh
+        n = FacetNormal(mesh)
+        h = self.h
+        beta = self.wind
+
+        if self.mesh.topological_dimension() == 2:
+            cross = lambda a, b: a[0]*b[1] - a[1]*b[0]
+
+        facet = self.weight * avg(h)**2 * inner(cross(jump(dot(grad(u), beta)), n('+')), cross(jump(dot(grad(v), beta)), n('+')))*dS
+        return facet
