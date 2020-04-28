@@ -163,8 +163,10 @@ class BurmanStabilisation(Stabilisation):
 
 
 class BarrenecheaBurmanGuzman(BurmanStabilisation):
-    def __init__(self, *args, h=None, **kwargs):
+    def __init__(self, *args, h=None, nu=None, **kwargs):
         super().__init__(*args, h=h, **kwargs)
+        self.weight = Constant(1)
+        self.nu = nu
         print("Using weight %s" % float(self.weight))
 
     def form(self, u, v):
@@ -176,5 +178,11 @@ class BarrenecheaBurmanGuzman(BurmanStabilisation):
         if self.mesh.topological_dimension() == 2:
             cross = lambda a, b: a[0]*b[1] - a[1]*b[0]
 
-        facet = self.weight * avg(h)**2 * inner(cross(jump(dot(grad(u), beta)), n('+')), cross(jump(dot(grad(v), beta)), n('+')))*dS
-        return facet
+        facetterm = self.weight * avg(h)**2 * inner(cross(jump(dot(grad(u), beta)), n('+')), cross(jump(dot(grad(v), beta)), n('+')))*dS
+
+        nu = self.nu
+        Lu = -nu * div(2*sym(grad(u))) + dot(grad(u), beta) + dot(grad(beta), u)
+        Lv = -nu * div(2*sym(grad(v))) + dot(grad(v), beta) + dot(grad(beta), v)
+        cellterm = self.weight * CellDiameter(mesh)**3 * inner(curl(Lu), curl(Lv))*dx
+
+        return facetterm + cellterm

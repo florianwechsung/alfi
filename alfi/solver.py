@@ -227,7 +227,7 @@ class NavierStokesSolver(object):
             self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
             self.stabilisation_form = self.stabilisation.form(u, v)
         elif self.stabilisation_type == "bbg":
-            self.stabilisation = BarrenecheaBurmanGuzman(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
+            self.stabilisation = BarrenecheaBurmanGuzman(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight, nu=nu)
             self.stabilisation_form = self.stabilisation.form(u, v)
         else:
             self.stabilisation = None
