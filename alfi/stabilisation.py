@@ -165,9 +165,7 @@ class BurmanStabilisation(Stabilisation):
 class BarrenecheaBurmanGuzman(BurmanStabilisation):
     def __init__(self, *args, h=None, nu=None, **kwargs):
         super().__init__(*args, h=h, **kwargs)
-        self.weight = Constant(1)
         self.nu = nu
-        print("Using weight %s" % float(self.weight))
 
     def form(self, u, v):
         mesh = self.mesh
