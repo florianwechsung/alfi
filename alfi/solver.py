@@ -62,7 +62,7 @@ class NavierStokesSolver(object):
                  high_accuracy=False
                  ):
 
-        assert solver_type in {"almg", "allu", "lu", "simple"}, "Invalid solver type %s" % solver_type
+        assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
             stabilisation_type = None
         assert stabilisation_type in {None, "gls", "supg", "burman"}, "Invalid stabilisation type %s" % stabilisation_type
@@ -125,7 +125,7 @@ class NavierStokesSolver(object):
         if not isinstance(gamma, Constant):
             gamma = Constant(gamma)
         self.gamma = gamma
-        if self.solver_type == "simple":
+        if self.solver_type in ["simple", "lsc"]:
             self.gamma.assign(0)
             warning("Setting gamma to 0")
         self.advect = Constant(0)
@@ -245,9 +245,8 @@ class NavierStokesSolver(object):
         self.solver = NonlinearVariationalSolver(problem, solver_parameters=params,
                                                  nullspace=nsp, options_prefix="ns_",
                                                  appctx=appctx)
-        self.transfers = self.get_transfers()
-        if self.transfers is not None and len(self.transfers) > 0:
-            self.solver.set_transfer_operators(*self.transfers)
+        self.transfermanager = TransferManager(native_transfers=self.get_transfers())
+        self.solver.set_transfer_manager(self.transfermanager)
         self.check_nograddiv_residual = True
         if self.check_nograddiv_residual:
             self.message(GREEN % "Checking residual without grad-div term")
@@ -417,7 +416,8 @@ class NavierStokesSolver(object):
                 "almg": fieldsplit_0_mg,
                 "alamg": fieldsplit_0_amg,
                 "lu": None,
-                "simple": None}[self.solver_type],
+                "simple": None,
+                "lsc": None}[self.solver_type],
             "fieldsplit_1": fieldsplit_1,
         }
 
@@ -444,6 +444,23 @@ class NavierStokesSolver(object):
             "fieldsplit_1_upper_ksp_type": "preonly",
             "fieldsplit_1_upper_pc_type": "jacobi",
         }
+
+        outer_lsc = {
+            "mat_type": "nest",
+            "pc_type": "fieldsplit",
+            "pc_fieldsplit_detect_saddle_point": None,
+            "pc_fieldsplit_type": "schur",
+            "pc_fieldsplit_schur_fact_type": "full",
+            "pc_fieldsplit_schur_precondition": "self",
+            "fieldsplit_0_ksp_type": "preonly",
+            "fieldsplit_0_pc_type": "hypre",
+
+            "fieldsplit_1_ksp_type": "preonly",
+            "fieldsplit_1_pc_type": "lsc",
+            "fieldsplit_1_lsc_pc_type": "hypre",
+            "fieldsplit_1_lsc_ksp_type": "preonly",
+        }
+
         outer_base = {
             "snes_type": "newtonls",
             "snes_max_it": 20,
@@ -488,10 +505,12 @@ class NavierStokesSolver(object):
             outer = {**outer_base, **outer_lu}
         elif self.solver_type == "simple": 
             outer = {**outer_base, **outer_simple}
+        elif self.solver_type == "lsc":
+            outer = {**outer_base, **outer_lsc}
         else:
             outer = {**outer_base, **outer_fieldsplit}
 
-        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type == "simple" else "baij"
+        parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type in ["simple", "lsc"] else "baij"
 
         return outer
 
@@ -513,8 +532,7 @@ class NavierStokesSolver(object):
                                             options_prefix="ns_adj",
                                             appctx=self.appctx)
 
-        if self.transfers is not None and len(self.transfers) > 0:
-            solver.set_transfer_operators(*self.transfers)
+        solver.set_transfer_manager(self.transfermanager)
         self.solver_adjoint = solver
 
     def load_balance(self, mesh):
@@ -575,14 +593,8 @@ class ConstantPressureSolver(NavierStokesSolver):
         qtransfer = NullTransfer()
         self.vtransfer = vtransfer
         self.qtransfer = qtransfer
-        if self.restriction:
-            transfers = [
-                dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict),
-                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
-        else:
-            transfers = [
-                dmhooks.transfer_operators(V, prolong=vtransfer.prolong),
-                dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
+        transfers = {V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+                     Q.ufl_element(): (prolong, restrict, qtransfer.inject)}
         return transfers
 
     def configure_patch_solver(self, opts):
@@ -627,17 +639,18 @@ class ScottVogeliusSolver(NavierStokesSolver):
             qtransfer = EmbeddedDGTransfer(V.ufl_element())
         else:
             raise ValueError("Unknown stabilisation")
-        transfers = [dmhooks.transfer_operators(Q, inject=qtransfer.inject)]
         self.qtransfer = qtransfer
         if self.hierarchy == "bary":
             vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
             self.vtransfer = vtransfer
-            if self.restriction:
-                transfers.append(
-                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong, restrict=vtransfer.restrict))
-            else:
-                transfers.append(
-                    dmhooks.transfer_operators(V, prolong=vtransfer.prolong))
+            transfers = {
+                V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
+        else:
+            transfers = {
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
         return transfers
 
     def configure_patch_solver(self, opts):
