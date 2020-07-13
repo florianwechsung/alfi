@@ -720,8 +720,9 @@ class HdivSolver(NavierStokesSolver):
 
     def get_transfers(self):
         V = self.Z.sub(0)
-        prolongation = EmbeddedDGTransfer(V.ufl_element())
-        return [dmhooks.transfer_operators(V, prolong=prolongation.prolong, inject=prolongation.inject, restrict=prolongation.restrict)]
+        dgtransfer = DGInjection()
+        transfers = {VectorElement("DG", V.mesh().ufl_cell(), V.ufl_element().degree()): (dgtransfer.prolong, restrict, dgtransfer.inject)}
+        return transfers
 
     def configure_patch_solver(self, opts):
         opts["patch_pc_patch_sub_mat_type"] = "seqdense"
