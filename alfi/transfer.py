@@ -179,7 +179,8 @@ class AutoSchoeberlTransfer(object):
         prev_parameters = self.prev_parameters.get(key, [])
         update = False
         for (prev_param, param) in zip(prev_parameters, self.parameters):
-            if float(param) != prev_param:
+            #if float(param) != prev_param:
+            if param != prev_param:
                 update = True
                 break
         return update
@@ -227,7 +228,8 @@ class AutoSchoeberlTransfer(object):
             self.solver[key] = solver
             self.rhs[key] = tildeu, rhs
             self.tensors[key] = A, b, bform
-            self.prev_parameters[key] = [float(param) for param in self.parameters]
+            #self.prev_parameters[key] = [float(param) for param in self.parameters]
+            self.prev_parameters[key] = self.parameters
         else:
             bcs = self.bcs[key]
             solver = self.solver[key]
@@ -242,7 +244,8 @@ class AutoSchoeberlTransfer(object):
                 bform = self.bform(rhs)
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
-                self.prev_parameters[key] = [float(param) for param in self.parameters]
+                #self.prev_parameters[key] = [float(param) for param in self.parameters]
+                self.prev_parameters[key] = self.parameters
 
         if mode == "prolong":
             self.standard_transfer(coarse, rhs, "prolong")
@@ -321,7 +324,14 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        if (callable(nu)):
+            (mh, level) = get_level(u.ufl_domain())
+            a = nu(mh[level]) * inner(2*sym(grad(u)), grad(v))*dx + \
+                gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        else:
+            a = nu * inner(2*sym(grad(u)), grad(v))*dx + \
+                gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+
         return a
 
     def bform(self, rhs):
