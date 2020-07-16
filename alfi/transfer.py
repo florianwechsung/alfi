@@ -61,7 +61,7 @@ class CoarseCellMacroPatches(object):
         coarse_to_fine_cell_map = mh.coarse_to_fine_cells[level-1]
         (_, firedrake_to_plex) = get_entity_renumbering(dmf, mf._cell_numbering, "cell")
         mc = mh[level-1]
-        (_, coarse_firedrake_to_plex) = get_entity_renumbering(mc._plex, mc._cell_numbering, "cell")
+        (_, coarse_firedrake_to_plex) = get_entity_renumbering(mc._topology_dm, mc._cell_numbering, "cell")
 
 
         patches = []
@@ -122,7 +122,7 @@ class AutoSchoeberlTransfer(object):
     @staticmethod
     def fix_coarse_boundaries(V):
         hierarchy, level = get_level(V.mesh())
-        dm = V.mesh()._plex
+        dm = V.mesh()._topology_dm
 
         section = V.dm.getDefaultSection()
         indices = []

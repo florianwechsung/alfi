@@ -474,7 +474,7 @@ def bary(cdm):
 
 def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, callbacks=None, reorder=None,
                       refinements_per_level=1):
-    cdm = mesh._plex
+    cdm = mesh._topology_dm
     cdm.setRefinementUniform(True)
     dms = []
     if mesh.comm.size > 1 and mesh._grown_halos:
@@ -526,7 +526,7 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
             scale = mesh._radius / np.linalg.norm(coords, axis=1).reshape(-1, 1)
             coords *= scale
 
-    barydms = (bary(mesh._plex), ) + tuple(bary(dm) for dm in dms)
+    barydms = (bary(mesh._topology_dm), ) + tuple(bary(dm) for dm in dms)
 
     for bdm in barydms:
         impl.filter_exterior_facet_labels(bdm)
@@ -543,10 +543,10 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
 
     lgmaps = []
     for i, m in enumerate(meshes):
-        no = impl.create_lgmap(m._plex)
+        no = impl.create_lgmap(m._topology_dm)
         m.init()
-        o = impl.create_lgmap(m._plex)
-        m._plex.setRefineLevel(i)
+        o = impl.create_lgmap(m._topology_dm)
+        m._topology_dm.setRefineLevel(i)
         lgmaps.append((no, o))
 
     coarse_to_fine_cells = []
@@ -559,10 +559,10 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
 
     lgmaps = []
     for i, m in enumerate(barymeshes):
-        no = impl.create_lgmap(m._plex)
+        no = impl.create_lgmap(m._topology_dm)
         m.init()
-        o = impl.create_lgmap(m._plex)
-        m._plex.setRefineLevel(i)
+        o = impl.create_lgmap(m._topology_dm)
+        m._topology_dm.setRefineLevel(i)
         lgmaps.append((no, o))
 
     d = mesh.topological_dimension()
@@ -574,8 +574,8 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
                zip(lgmaps[:-1], lgmaps[1:]),
                coarse_to_fine_cells):
 
-        cdm = coarseu._plex
-        fdm = fineu._plex
+        cdm = coarseu._topology_dm
+        fdm = fineu._topology_dm
         _, cn2o = impl.get_entity_renumbering(cdm, coarseu._cell_numbering, "cell")
         _, fn2o = impl.get_entity_renumbering(fdm, fineu._cell_numbering, "cell")
         plex_uniform_coarse_to_fine = numpy.empty_like(uniform_coarse_to_fine)
@@ -595,8 +595,8 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
                 bary_cells.extend(list(range(fc*(d+1), (fc+1)*(d+1))))
             plex_coarse_bary_to_fine_bary[c] = bary_cells
 
-        cdm = coarse._plex
-        fdm = fine._plex
+        cdm = coarse._topology_dm
+        fdm = fine._topology_dm
 
         co2n, _ = impl.get_entity_renumbering(cdm, coarse._cell_numbering, "cell")
         fo2n, _ = impl.get_entity_renumbering(fdm, fine._cell_numbering, "cell")

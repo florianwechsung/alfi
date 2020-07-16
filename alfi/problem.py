@@ -13,7 +13,7 @@ class NavierStokesProblem(object):
             mh = BaryMeshHierarchy(baseMesh, nref, callbacks=callbacks,
                                    reorder=True, distribution_parameters=distribution_parameters)
         elif hierarchy == "uniformbary":
-            bmesh = Mesh(bary(baseMesh._plex), distribution_parameters={"partition": False})
+            bmesh = Mesh(bary(baseMesh._topology_dm), distribution_parameters={"partition": False})
             mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=callbacks,
                                distribution_parameters=distribution_parameters)
         elif hierarchy == "uniform":

@@ -139,7 +139,7 @@ class NavierStokesSolver(object):
         self.Z = Z
         comm = mesh.mpi_comm()
         if False:#comm.size == 1:
-            visbase = firedrake.Mesh(mesh._plex.clone(), dim=mesh.ufl_cell().geometric_dimension(),
+            visbase = firedrake.Mesh(mesh._topology_dm.clone(), dim=mesh.ufl_cell().geometric_dimension(),
                                      distribution_parameters=problem.distribution_parameters,
                                      reorder=True)
             vismh = MeshHierarchy(visbase, nref_vis)
