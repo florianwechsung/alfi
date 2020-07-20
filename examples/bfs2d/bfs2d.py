@@ -18,7 +18,7 @@ class TwoDimBackwardsFacingStepProblem(NavierStokesProblem):
     @staticmethod
     def poiseuille_flow(domain):
         (x, y) = SpatialCoordinate(domain)
-        return as_vector([4 * (2-y)*(y-1)*(y>1), 0])
+        return conditional(gt(y, 1), as_vector([4 * (2-y)*(y-1), 0]), Constant((0, 0)))
 
     def bcs(self, Z):
         bcs = [DirichletBC(Z.sub(0), self.poiseuille_flow(Z.mesh()), 1),
