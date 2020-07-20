@@ -1,4 +1,4 @@
-from alfi.solver import ConstantPressureSolver, ScottVogeliusSolver
+from alfi.solver import ConstantPressureSolver, ScottVogeliusSolver, MardalTaiWintherSolver
 from mpi4py import MPI
 from firedrake.petsc import PETSc
 from firedrake import *
@@ -26,7 +26,7 @@ def get_default_parser():
     parser.add_argument("--stabilisation-type", type=str, default=None,
                         choices=["none", "burman", "gls", "supg"])
     parser.add_argument("--discretisation", type=str, required=True,
-                        choices=["pkp0", "sv"])
+                        choices=["pkp0", "sv", "mtw"])
     parser.add_argument("--gamma", type=float, default=1e4)
     parser.add_argument("--clear", dest="clear", default=False,
                         action="store_true")
@@ -50,7 +50,8 @@ def get_default_parser():
 
 def get_solver(args, problem, hierarchy_callback=None):
     solver_t = {"pkp0": ConstantPressureSolver,
-                "sv": ScottVogeliusSolver}[args.discretisation]
+                "sv": ScottVogeliusSolver,
+                "mtw": MardalTaiWintherSolver}[args.discretisation]
     solver = solver_t(
         problem,
         solver_type=args.solver_type,

@@ -660,3 +660,17 @@ class ScottVogeliusSolver(NavierStokesSolver):
 
     def distribution_parameters(self):
         return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
+
+
+class MardalTaiWintherSolver(ConstantPressureSolver):
+    def function_space(self, mesh, k):
+        tdim = mesh.topological_dimension()
+        assert tdim == 2
+        assert k == 3
+
+        V = FunctionSpace(mesh, "MTW", k)
+        Q = FunctionSpace(mesh, "DG", 0)
+        return MixedFunctionSpace([V, Q])
+
+    def get_transfers(self):
+        return None
