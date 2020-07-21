@@ -122,7 +122,7 @@ class AutoSchoeberlTransfer(object):
     @staticmethod
     def fix_coarse_boundaries(V):
         hierarchy, level = get_level(V.mesh())
-        dm = V.mesh()._plex
+        dm = V.mesh()._topology_dm
 
         section = V.dm.getDefaultSection()
         indices = []
