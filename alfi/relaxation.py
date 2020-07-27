@@ -67,7 +67,7 @@ class OrderedRelaxation(object):
         return dm.getVecClosure(coordsSection, coordsVec, p).reshape(-1, dim).mean(axis=0)
 
     def visualise(self, mesh, vertex=0, color="blue"):
-        dm = mesh._plex
+        dm = mesh._topology_dm
         (vlo, vhi) = dm.getDepthStratum(0)
         entities = self.callback(dm, vlo+vertex)
         coords = [self.coords(dm, e) for e in entities]

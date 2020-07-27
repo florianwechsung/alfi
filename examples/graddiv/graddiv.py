@@ -47,7 +47,7 @@ if args.mh == "bary":
     mh = BaryMeshHierarchy(base, nref, callbacks=(before, after),
                            reorder=True, distribution_parameters=distribution_parameters)
 elif args.mh == "uniformbary":
-    bmesh = Mesh(bary(base._plex), distribution_parameters={"partition": False})
+    bmesh = Mesh(bary(base._topology_dm), distribution_parameters={"partition": False})
     mh = MeshHierarchy(bmesh, nref, reorder=True, callbacks=(before, after),
                        distribution_parameters=distribution_parameters)
 elif args.mh == "uniform":
