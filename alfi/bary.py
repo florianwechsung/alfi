@@ -4,6 +4,7 @@ from pyop2.datatypes import IntType
 from mpi4py import MPI
 from fractions import Fraction
 from firedrake.cython import mgimpl as impl
+from firedrake.cython.dmcommon import FACE_SETS_LABEL
 from firedrake.petsc import *
 import numpy
 
@@ -509,7 +510,10 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
         # Remove vertex (and edge) points from labels on exterior
         # facets.  Interior facets will be relabeled in Mesh
         # construction below.
-        impl.filter_exterior_facet_labels(rdm)
+        impl.filter_labels(rdm, rdm.getHeightStratum(1),
+                           "exterior_facets", "boundary_faces",
+                           FACE_SETS_LABEL)
+
         rdm.removeLabel("pyop2_core")
         rdm.removeLabel("pyop2_owned")
         rdm.removeLabel("pyop2_ghost")
@@ -529,7 +533,9 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
     barydms = (bary(mesh._topology_dm), ) + tuple(bary(dm) for dm in dms)
 
     for bdm in barydms:
-        impl.filter_exterior_facet_labels(bdm)
+        impl.filter_labels(bdm, bdm.getHeightStratum(1),
+                           "exterior_facets", "boundary_faces",
+                           FACE_SETS_LABEL)
 
     barymeshes = [firedrake.Mesh(dm, dim=mesh.ufl_cell().geometric_dimension(),
                                  distribution_parameters=distribution_parameters,
