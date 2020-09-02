@@ -367,6 +367,215 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
             raise NotImplementedError
 
 
+class AlgebraicSchoeberlTransfer(object):
+    def __init__(self, parameters, A_callback, BTWB_callback, tdim, hierarchy):
+        self.tdim = tdim
+        self.solver = {}
+        self.bcs = {}
+        self.rhs = {}
+        self.tensors = {}
+        self.parameters = parameters
+        self.prev_parameters = {}
+        self.force_rebuild_d = {}
+        patchparams = {
+            "snes_type": "ksponly",
+            "ksp_type": "preonly",
+            "ksp_convergence_test": "skip",
+            "mat_type": "aij",
+            "pc_type": "lu"
+        }
+        # patchparams = {"snes_type": "ksponly",
+        #                "ksp_type": "preonly",
+        #                "ksp_convergence_test": "skip",
+        #                "mat_type": "matfree",
+        #                "pc_type": "python",
+        #                "pc_python_type": "firedrake.PatchPC",
+        #                "patch_pc_patch_save_operators": "true",
+        #                "patch_pc_patch_partition_of_unity": False,
+        #                "patch_pc_patch_multiplicative": False,
+        #                "patch_pc_patch_sub_mat_type": "seqaij" if tdim > 2 else "seqdense",
+        #                "patch_pc_patch_construct_type": "python",
+        #                "patch_pc_patch_construct_python_type": "alfi.transfer.CoarseCellMacroPatches" if hierarchy == "bary" else "alfi.transfer.CoarseCellPatches",
+        #                "patch_sub_ksp_type": "preonly",
+        #                "patch_sub_pc_type": "lu"}
+        self.patchparams = patchparams
+        self.A_callback = A_callback
+        self.BTWB_callback = BTWB_callback
+
+    def break_ref_cycles(self):
+        for attr in ["solver", "bcs", "rhs", "tensors", "parameters", "prev_parameters"]:
+            if hasattr(self, attr):
+                delattr(self, attr)
+
+    @staticmethod
+    def fix_coarse_boundaries(V):
+        hierarchy, level = get_level(V.mesh())
+        dm = V.mesh()._topology_dm
+
+        section = V.dm.getDefaultSection()
+        indices = []
+        fStart, fEnd = dm.getHeightStratum(1)
+        # Spin over faces, if the face is marked with a magic label
+        # value, it means it was in the coarse mesh.
+        for p in range(fStart, fEnd):
+            value = dm.getLabelValue("prolongation", p)
+            if value > -1 and value <= level:
+                # OK, so this is a coarse mesh face.
+                # Grab all the points in the closure.
+                closure, _ = dm.getTransitiveClosure(p)
+                for c in closure:
+                    # Now add all the dofs on that point to the list
+                    # of boundary nodes.
+                    dof = section.getDof(c)
+                    off = section.getOffset(c)
+                    for d in range(dof):
+                        indices.append(off + d)
+        nodelist = unique(indices).astype(IntType)
+
+        class FixedDirichletBC(DirichletBC):
+            def __init__(self, V, g, nodelist):
+                self.nodelist = nodelist
+                DirichletBC.__init__(self, V, g, "on_boundary")
+
+            @utils.cached_property
+            def nodes(self):
+                return self.nodelist
+
+        dim = V.mesh().topological_dimension()
+        bc = FixedDirichletBC(V, ufl.zero(V.ufl_element().value_shape()), nodelist)
+
+        return bc
+
+    def force_rebuild(self):
+        self.force_rebuild_d = {}
+        for k in self.prev_parameters:
+            self.force_rebuild_d[k] = True
+
+    def rebuild(self, key):
+        if key in self.force_rebuild_d and self.force_rebuild_d[key]:
+            self.force_rebuild_d[key] = False
+            warning(RED % ("Rebuild prolongation for key %i" % key))
+            return True
+        prev_parameters = self.prev_parameters.get(key, [])
+        update = False
+        for (prev_param, param) in zip(prev_parameters, self.parameters):
+            #if float(param) != prev_param:
+            if param != prev_param:
+                update = True
+                break
+        return update
+
+    @timed_function("SchoeberlProlong")
+    def prolong(self, coarse, fine):
+        self.restrict_or_prolong(coarse, fine, "prolong")
+
+    @timed_function("SchoeberlRestrict")
+    def restrict(self, fine, coarse):
+        self.restrict_or_prolong(fine, coarse, "restrict")
+
+    def restrict_or_prolong(self, source, target, mode):
+        if mode == "prolong":
+            coarse = source
+            fine = target
+        else:
+            fine = source
+            coarse = target
+        # Rebuild without any indices
+        V = FunctionSpace(fine.ufl_domain(), fine.function_space().ufl_element())
+        key = V.dim()
+
+        firsttime = self.bcs.get(key, None) is None
+
+        _, level = get_level(V.ufl_domain())
+        if firsttime:
+            from firedrake.solving_utils import _SNESContext
+            bcs = self.fix_coarse_boundaries(V)
+            A = self.A_callback(level, mat=None)
+            BTWB = self.BTWB_callback(level, mat=None)
+            A.petscmat += BTWB
+            for i in range(self.tdim):
+                A.petscmat.zeroRows(i+bcs.nodes*self.tdim, 1.0)
+
+            tildeu, rhs = Function(V), Function(V)
+
+            b = Function(V)
+            problem = LinearVariationalProblem(a=A.form, L=0, u=tildeu, bcs=bcs)
+            ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
+                               pmat_type=self.patchparams["mat_type"],
+                               appctx={}, options_prefix="prolongation")
+
+            solver = LinearSolver(A, solver_parameters=self.patchparams,
+                                  options_prefix="prolongation")
+            solver._ctx = ctx
+            self.bcs[key] = bcs
+            self.solver[key] = solver
+            self.rhs[key] = tildeu, rhs
+            # self.tensors[key] = A, b, bform
+            self.tensors[key] = A, b, BTWB
+            #self.prev_parameters[key] = [float(param) for param in self.parameters]
+            self.prev_parameters[key] = self.parameters
+        else:
+            bcs = self.bcs[key]
+            solver = self.solver[key]
+            # A, b, bform = self.tensors[key]
+            A, b, BTWB = self.tensors[key]
+            tildeu, rhs = self.rhs[key]
+
+            # Update operator if parameters have changed.
+
+            if self.rebuild(key):
+                A = solver.A
+                self.A_callback(level, mat=A)
+                self.BTWB_callback(level, mat=BTWB)
+                A.petscmat += BTWB
+                for i in range(self.tdim):
+                    A.petscmat.zeroRows(i+bcs.nodes*self.tdim, 1.0)
+                self.tensors[key] = A, b, BTWB
+                # A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
+                #self.prev_parameters[key] = [float(param) for param in self.parameters]
+                self.prev_parameters[key] = self.parameters
+
+        if mode == "prolong":
+            self.standard_transfer(coarse, rhs, "prolong")
+
+            with rhs.dat.vec_ro as rhsvec:
+                with b.dat.vec_wo as bvec:
+                    BTWB.mult(rhsvec, bvec)
+            bcs.apply(b)
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
+                with b.dat.vec_ro as rhsv:
+                    with tildeu.dat.vec_wo as x:
+                        solver.ksp.pc.apply(rhsv, x)
+            fine.dat.data[:] = rhs.dat.data_ro - tildeu.dat.data_ro
+
+        else:
+            tildeu.dat.data[:] = fine.dat.data_ro
+            bcs.apply(tildeu)
+            with solver.inserted_options(), dmhooks.add_hooks(solver.ksp.dm, solver, appctx=solver._ctx):
+                with tildeu.dat.vec_ro as rhsv:
+                    with rhs.dat.vec_wo as x:
+                        solver.ksp.pc.apply(rhsv, x)
+            with rhs.dat.vec_ro as rhsvec:
+                with b.dat.vec_wo as bvec:
+                    BTWB.mult(rhsvec, bvec)
+            rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
+            self.standard_transfer(rhs, coarse, "restrict")
+
+
+        # def energy_norm(u):
+        #     return assemble(action(action(self.form(u.function_space()), u), u))
+        # if mode == "prolong":
+        #     warning("From mesh %i to %i" % (coarse.function_space().dim(), fine.function_space().dim()))
+        #     warning("Energy norm ratio from %.2f to %.2f" % ((energy_norm(rhs)/energy_norm(coarse)), energy_norm(fine)/energy_norm(coarse)))
+
+    def standard_transfer(self, source, target, mode):
+        if mode == "prolong":
+            prolong(source, target)
+        elif mode == "restrict":
+            restrict(source, target)
+        else:
+            raise NotImplementedError
+
 class NullTransfer(object):
     def transfer(self, src, dest):
         with dest.dat.vec_wo as x:
