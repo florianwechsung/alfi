@@ -77,7 +77,7 @@ def get_solver(args, problem, hierarchy_callback=None):
 def performance_info(comm, solver):
         if comm.rank == 0:
             print(BLUE % "Some performance info:")
-        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter"]
+        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter", "PCTinyASMSetASMLocalSubdomains", "PCTinyASMApply", "PCTinyASMSetup"]
         perf = dict((e, PETSc.Log.Event(e).getPerfInfo()) for e in events)
         perf_reduced = {}
         for k, v in perf.items():
