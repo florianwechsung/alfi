@@ -137,7 +137,7 @@ class ASMPCCoarseCellPatches(ASMPatchPC):
 
 
 class AutoSchoeberlTransfer(object):
-    def __init__(self, parameters, tdim, hierarchy, backend='pcpatch'):
+    def __init__(self, parameters, tdim, hierarchy, backend='pcpatch', b_matfree=True):
         assert backend in ['pcpatch', 'tinyasm']
         self.solver = {}
         self.bcs = {}
@@ -175,6 +175,7 @@ class AutoSchoeberlTransfer(object):
                 "pc_coarsecell_backend": 'tinyasm'
             }
         self.patchparams = {**patchparams, **backendparams}
+        self.b_matfree = b_matfree
 
     def break_ref_cycles(self):
         for attr in ["solver", "bcs", "rhs", "tensors", "parameters", "prev_parameters"]:
@@ -276,7 +277,10 @@ class AutoSchoeberlTransfer(object):
 
             tildeu, rhs = Function(V), Function(V)
 
-            bform = self.bform(rhs)
+            if self.b_matfree:
+                bform = self.bform(rhs)
+            else:
+                bform = assemble(self.bform(TrialFunction(V)))
             b = Function(V)
             problem = LinearVariationalProblem(a=a, L=0, u=tildeu, bcs=bcs)
             ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
@@ -303,7 +307,10 @@ class AutoSchoeberlTransfer(object):
             if self.rebuild(key):
                 A = solver.A
                 a = self.form(V)
-                bform = self.bform(rhs)
+                if self.b_matfree:
+                    bform = self.bform(rhs)
+                else:
+                    bform = assemble(self.bform(TrialFunction(V)))
                 self.tensors[key] = A, b, bform
                 A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
                 #self.prev_parameters[key] = [float(param) for param in self.parameters]
@@ -312,7 +319,13 @@ class AutoSchoeberlTransfer(object):
         if mode == "prolong":
             self.standard_transfer(coarse, rhs, "prolong")
 
-            b = assemble(bform, bcs=bcs, tensor=b)
+            if self.b_matfree:
+                b = assemble(bform, bcs=bcs, tensor=b)
+            else:
+                with rhs.dat.vec_ro as rhsv:
+                    with b.dat.vec_wo as out:
+                        bform.petscmat.mult(rhsv, out)
+                bcs.apply(b)
             # # Could do
             # # solver.solve(tildeu, b)
             # # but that calls a lot of SNES and KSP overhead.
@@ -335,7 +348,12 @@ class AutoSchoeberlTransfer(object):
                     with rhs.dat.vec_wo as x:
                         solver.ksp.pc.apply(rhsv, x)
             # solver.solve(rhs, fine)
-            b = assemble(bform, tensor=b)
+            if self.b_matfree:
+                b = assemble(bform, tensor=b)
+            else:
+                with rhs.dat.vec_ro as rhsv:
+                    with b.dat.vec_wo as out:
+                        bform.petscmat.mult(rhsv, out)
             # rhs.assign(fine-b)
             rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
             self.standard_transfer(rhs, coarse, "restrict")
