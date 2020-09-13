@@ -89,8 +89,56 @@ class CoarseCellMacroPatches(object):
         return (patches, piterset)
 
 
+class ASMPCCoarseCellPatches(ASMPatchPC):
+
+    _prefix = "pc_coarsecell_"
+
+    def get_patches(self, V):
+        from firedrake.mg.utils import get_level
+        from firedrake.cython.mgimpl import get_entity_renumbering
+
+        mesh = V._mesh
+        (mh, level) = get_level(mesh)
+        mesh_dm = mesh._topology_dm
+
+        section = V.dm.getDefaultSection()
+
+        coarse_to_fine_cell_map = mh.coarse_to_fine_cells[level-1]
+        (_, firedrake_to_plex) = get_entity_renumbering(
+            mesh_dm, mesh._cell_numbering, "cell")
+
+        patches = []
+        points = []
+        for fine_firedrake in coarse_to_fine_cell_map:
+            # we need to convert firedrake cell numbering to plex cell numbering
+            fine_plex = [firedrake_to_plex[ff] for ff in fine_firedrake]
+            entities = []
+            for fp in fine_plex:
+                (pts, _) = mesh_dm.getTransitiveClosure(fp, True)
+                for pt in pts:
+                    value = mesh_dm.getLabelValue("prolongation", pt)
+                    if not (value > -1 and value <= level):
+                        entities.append(pt)
+            unique_entities = unique(entities)
+            points.append(unique_entities)
+            indices = []
+            for p in unique_entities:
+                dof = section.getDof(p)
+                if dof <= 0:
+                    continue
+                off = section.getOffset(p)
+                # Local indices within W
+                V_indices = numpy.arange(off*V.value_size, V.value_size * (off + dof), dtype='int32')
+                indices.extend(V_indices)
+
+            iset = PETSc.IS().createGeneral(indices, comm=PETSc.COMM_SELF)
+            patches.append(iset)
+        return patches
+
+
 class AutoSchoeberlTransfer(object):
-    def __init__(self, parameters, tdim, hierarchy):
+    def __init__(self, parameters, tdim, hierarchy, backend='pcpatch'):
+        assert backend in ['pcpatch', 'tinyasm']
         self.solver = {}
         self.bcs = {}
         self.rhs = {}
@@ -101,18 +149,32 @@ class AutoSchoeberlTransfer(object):
         patchparams = {"snes_type": "ksponly",
                        "ksp_type": "preonly",
                        "ksp_convergence_test": "skip",
-                       "mat_type": "matfree",
-                       "pc_type": "python",
-                       "pc_python_type": "firedrake.PatchPC",
-                       "patch_pc_patch_save_operators": "true",
-                       "patch_pc_patch_partition_of_unity": False,
-                       "patch_pc_patch_multiplicative": False,
-                       "patch_pc_patch_sub_mat_type": "seqaij" if tdim > 2 else "seqdense",
-                       "patch_pc_patch_construct_type": "python",
-                       "patch_pc_patch_construct_python_type": "alfi.transfer.CoarseCellMacroPatches" if hierarchy == "bary" else "alfi.transfer.CoarseCellPatches",
-                       "patch_sub_ksp_type": "preonly",
-                       "patch_sub_pc_type": "lu"}
-        self.patchparams = patchparams
+                       }
+        if backend == 'pcpatch':
+            backendparams = {
+                "mat_type": "matfree",
+                "pc_type": "python",
+                "pc_python_type": "firedrake.PatchPC",
+                "patch_pc_patch_save_operators": "true",
+                "patch_pc_patch_partition_of_unity": False,
+                "patch_pc_patch_multiplicative": False,
+                "patch_pc_patch_sub_mat_type": "seqaij" if tdim > 2 else "seqdense",
+                "patch_pc_patch_construct_type": "python",
+                "patch_pc_patch_construct_python_type": "alfi.transfer.CoarseCellMacroPatches" if hierarchy == "bary" else "alfi.transfer.CoarseCellPatches",
+                "patch_sub_ksp_type": "preonly",
+                "patch_sub_pc_type": "lu"
+            }
+        else:
+            if hierarchy == 'bary':
+                raise NotImplementedError('ASMPCCoarseCellMacroPatches not yet implemented')
+
+            backendparams = {
+                "mat_type": "aij",
+                "pc_type": "python",
+                "pc_python_type": "alfi.transfer.ASMPCCoarseCellPatches",
+                "pc_coarsecell_backend": 'tinyasm'
+            }
+        self.patchparams = {**patchparams, **backendparams}
 
     def break_ref_cycles(self):
         for attr in ["solver", "bcs", "rhs", "tensors", "parameters", "prev_parameters"]:
@@ -366,52 +428,6 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         else:
             raise NotImplementedError
 
-class ASMPCCoarseCellPatches(ASMPatchPC):
-
-    _prefix = "pc_coarsecell_"
-
-    def get_patches(self, V):
-        from firedrake.mg.utils import get_level
-        from firedrake.cython.mgimpl import get_entity_renumbering
-
-        mesh = V._mesh
-        (mh, level) = get_level(mesh)
-        mesh_dm = mesh._topology_dm
-
-        section = V.dm.getDefaultSection()
-
-        coarse_to_fine_cell_map = mh.coarse_to_fine_cells[level-1]
-        (_, firedrake_to_plex) = get_entity_renumbering(
-            mesh_dm, mesh._cell_numbering, "cell")
-
-        patches = []
-        points = []
-        for fine_firedrake in coarse_to_fine_cell_map:
-            # we need to convert firedrake cell numbering to plex cell numbering
-            fine_plex = [firedrake_to_plex[ff] for ff in fine_firedrake]
-            entities = []
-            for fp in fine_plex:
-                (pts, _) = mesh_dm.getTransitiveClosure(fp, True)
-                for pt in pts:
-                    value = mesh_dm.getLabelValue("prolongation", pt)
-                    if not (value > -1 and value <= level):
-                        entities.append(pt)
-            unique_entities = unique(entities)
-            points.append(unique_entities)
-            indices = []
-            for p in unique_entities:
-                dof = section.getDof(p)
-                if dof <= 0:
-                    continue
-                off = section.getOffset(p)
-                # Local indices within W
-                V_indices = numpy.arange(off*V.value_size, V.value_size * (off + dof), dtype='int32')
-                indices.extend(V_indices)
-
-            iset = PETSc.IS().createGeneral(indices, comm=PETSc.COMM_SELF)
-            patches.append(iset)
-        return patches
-
 class AlgebraicSchoeberlTransfer(object):
     def __init__(self, parameters, A_callback, BTWB_callback, tdim, hierarchy):
         self.tdim = tdim
@@ -427,10 +443,9 @@ class AlgebraicSchoeberlTransfer(object):
             "ksp_type": "preonly",
             "ksp_convergence_test": "skip",
             "mat_type": "aij",
-            "pc_type": "lu",
-            # "pc_type": "python",
-            # "pc_python_type": "alfi.transfer.ASMPCCoarseCellPatches",
-            # "pc_coarsecell_backend": 'tinyasm'
+            "pc_type": "python",
+            "pc_python_type": "alfi.transfer.ASMPCCoarseCellPatches",
+            "pc_coarsecell_backend": 'tinyasm'
         }
         self.patchparams = patchparams
         self.A_callback = A_callback

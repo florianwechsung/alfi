@@ -77,7 +77,7 @@ def get_solver(args, problem, hierarchy_callback=None):
 def performance_info(comm, solver):
         if comm.rank == 0:
             print(BLUE % "Some performance info:")
-        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter", "PCTinyASMSetASMLocalSubdomains", "PCTinyASMApply", "PCTinyASMSetup"]
+        events = ["MatMult", "MatSolve", "PCSetUp", "PCApply", "PCPATCHSolve", "PCPATCHApply", "KSPSolve_FS_0",  "KSPSolve_FS_Low", "KSPSolve", "SNESSolve", "ParLoopExecute", "ParLoopCells", "SchoeberlProlong", "SchoeberlRestrict", "inject", "prolong", "restriction", "MatFreeMatMult", "MatFreeMatMultTranspose", "DMPlexRebalanceSharedPoints", "PCPatchComputeOp", "PCPATCHScatter", "PCTinyASMSetASMLocalSubdomains", "PCTinyASMApply", "PCTinyASMSetup", "MatLUFactorSym", "MatLUFactorNum"]
         perf = dict((e, PETSc.Log.Event(e).getPerfInfo()) for e in events)
         perf_reduced = {}
         for k, v in perf.items():
@@ -87,7 +87,7 @@ def performance_info(comm, solver):
         perf_reduced_sorted = [(k, v) for (k, v) in sorted(perf_reduced.items(), key=lambda d: -d[1]["time"])]
         if comm.rank == 0:
             for k, v in perf_reduced_sorted:
-                print(GREEN % (("%s:" % k).ljust(30) + "Time = % 6.2fs, Time/1kdofs = %.2fs" % (v["time"], 1000*v["time"]/solver.Z.dim())))
+                print(GREEN % (("%s:" % k).ljust(40) + "Time=%6.2fs, Count=%6i" % (v["time"], v["count"])))
             time = perf_reduced_sorted[0][1]["time"]
             print(BLUE % ("% 5.1fs \t % 4.2fs \t %i" % (time, 1000*time/solver.Z.dim(), solver.Z.dim())))
 
