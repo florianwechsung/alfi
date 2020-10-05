@@ -37,6 +37,41 @@ class DGMassInv(PCBase):
     def applyTranspose(self, pc, x, y):
         raise NotImplementedError("Sorry!")
 
+class CGMassInv(PCBase):
+
+    def initialize(self, pc):
+        _, P = pc.getOperators()
+        prefix = pc.getOptionsPrefix()
+        appctx = self.get_appctx(pc)
+        V = dmhooks.get_function_space(pc.getDM())
+        # get function spaces
+        u = TrialFunction(V)
+        v = TestFunction(V)
+        mass = assemble(inner(u, v)*dx)
+
+        Mksp = PETSc.KSP().create(comm=pc.comm)
+        Mksp.incrementTabLevel(1, parent=pc)
+        Mksp.setOptionsPrefix(prefix + "Mp_")
+        Mksp.setOperators(mass.petscmat)
+        Mksp.setUp()
+        Mksp.setFromOptions()
+        self.Mksp = Mksp
+
+
+        self.nu = appctx["nu"]
+        self.gamma = appctx["gamma"]
+
+    def update(self, pc):
+        pass
+
+    def apply(self, pc, x, y):
+        self.Mksp.solve(x, y)
+        scaling = float(self.nu) + float(self.gamma)
+        y.scale(-scaling)
+
+    def applyTranspose(self, pc, x, y):
+        raise NotImplementedError("Sorry!")
+
 
 class NavierStokesSolver(object):
 
@@ -386,7 +421,9 @@ class NavierStokesSolver(object):
         fieldsplit_1 = {
             "ksp_type": "preonly",
             "pc_type": "python",
-            "pc_python_type": "alfi.solver.DGMassInv"
+            "pc_python_type": "alfi.solver." + ("CGMassInv" if ("CG" in self.Z.sub(1).__str__()) else "DGMassInv"),
+            "Mp_ksp_type": "preonly",
+            "Mp_pc_type": "lu",
         }
 
         use_mg = self.solver_type == "almg"
@@ -625,6 +662,63 @@ class ScottVogeliusSolver(NavierStokesSolver):
     def function_space(self, mesh, k):
         eleu = VectorElement("Lagrange", mesh.ufl_cell(), k)
         elep = FiniteElement("Discontinuous Lagrange", mesh.ufl_cell(), k-1)
+        V = FunctionSpace(mesh, eleu)
+        Q = FunctionSpace(mesh, elep)
+        return MixedFunctionSpace([V, Q])
+
+    def get_transfers(self):
+        V = self.Z.sub(0)
+        Q = self.Z.sub(1)
+        if self.stabilisation_type in ["burman", None]:
+            qtransfer = NullTransfer()
+        elif self.stabilisation_type in ["gls", "supg"]:
+            qtransfer = EmbeddedDGTransfer(V.ufl_element())
+        else:
+            raise ValueError("Unknown stabilisation")
+        self.qtransfer = qtransfer
+        if self.hierarchy == "bary":
+            vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
+            self.vtransfer = vtransfer
+            transfers = {
+                V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
+        else:
+            transfers = {
+                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+            }
+        return transfers
+
+    def configure_patch_solver(self, opts):
+        patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
+        patchlu2d = "petsc"
+        opts["patch_pc_patch_sub_mat_type"] = "seqaij"
+        opts["patch_sub_pc_factor_mat_solver_type"] = patchlu3d if self.tdim > 2 else patchlu2d
+
+    def distribution_parameters(self):
+        return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
+
+
+class TaylorHoodSolver(NavierStokesSolver):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def residual(self):
+        u, p = split(self.z)
+        v, q = TestFunctions(self.Z)
+        F = (
+            self.nu * inner(2*sym(grad(u)), grad(v))*dx
+            + self.gamma * inner(div(u), div(v))*dx
+            + self.advect * inner(dot(grad(u), u), v)*dx
+            - p * div(v) * dx
+            - div(u) * q * dx
+        )
+        return F
+
+    def function_space(self, mesh, k):
+        eleu = VectorElement("Lagrange", mesh.ufl_cell(), k)
+        elep = FiniteElement("Lagrange", mesh.ufl_cell(), k-1)
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
