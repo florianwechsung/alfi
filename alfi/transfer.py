@@ -5,11 +5,98 @@ from firedrake.petsc import *
 import weakref
 from numpy import unique
 import numpy
+numpy.set_printoptions(threshold=numpy.inf)
 from pyop2.datatypes import IntType
 from firedrake.mg.utils import *
 from pyop2.profiling import timed_function
 from alfi.bubble import BubbleTransfer
 
+def get_basemesh_nodes(W):
+    pstart, pend = W.mesh()._topology_dm.getChart()
+    section = W.dm.getDefaultSection()
+    basemeshoff = {}
+    basemeshdof = {}
+    degree = W.ufl_element().degree()[1]
+    nlayers = W.mesh().layers
+    div = nlayers + (degree-1)*(nlayers-1)
+    for p in range(pstart, pend):
+        dof = section.getDof(p)
+        off = section.getOffset(p)
+        assert dof%div == 0
+        basemeshoff[p] = off
+        basemeshdof[p] = dof//div
+    return basemeshoff, basemeshdof
+
+@timed_function("fix_coarse_boundaries")
+def fix_coarse_boundaries(V):
+    if isinstance(V.mesh()._topology, firedrake.mesh.ExtrudedMeshTopology):
+        hierarchy, level = get_level(V.mesh())
+        dm = V.mesh()._topology_dm
+        nlayers = V.mesh().layers
+        degree = V.ufl_element().degree()[1]
+
+        baseoff, basedof = get_basemesh_nodes(V)
+        section = V.dm.getDefaultSection()
+        indices = []
+        fStart, fEnd = dm.getHeightStratum(1)
+        # Spin over faces, if the face is marked with a magic label
+        # value, it means it was in the coarse mesh.
+        for p in range(fStart, fEnd):
+            value = dm.getLabelValue("prolongation", p)
+            if value > -1 and value <= level:
+                # OK, so this is a coarse mesh face.
+                # Grab all the points in the closure.
+                closure, _ = dm.getTransitiveClosure(p)
+                for c in closure:
+                    # Now add all the dofs on that point to the list
+                    # of boundary nodes.
+                    dof = basedof[c]
+                    off = baseoff[c]
+                    for d in range(dof*degree*(nlayers-1)+dof):
+                        indices.append(off + d)
+        # indices now contains all the nodes on boundaries of course cells on the basemesh extruded up vertically
+        # now we need to add every other horizontal layer as well
+        for i in range(0, nlayers, 2):
+            for p in basedof.keys():
+                start = baseoff[p] + degree*i*basedof[p]
+                indices += list(range(start, start+basedof[p]))
+        nodelist = np.unique(indices).astype(IntType)
+    else:
+        hierarchy, level = get_level(V.mesh())
+        dm = V.mesh()._topology_dm
+
+        section = V.dm.getDefaultSection()
+        indices = []
+        fStart, fEnd = dm.getHeightStratum(1)
+        # Spin over faces, if the face is marked with a magic label
+        # value, it means it was in the coarse mesh.
+        for p in range(fStart, fEnd):
+            value = dm.getLabelValue("prolongation", p)
+            if value > -1 and value <= level:
+                # OK, so this is a coarse mesh face.
+                # Grab all the points in the closure.
+                closure, _ = dm.getTransitiveClosure(p)
+                for c in closure:
+                    # Now add all the dofs on that point to the list
+                    # of boundary nodes.
+                    dof = section.getDof(c)
+                    off = section.getOffset(c)
+                    for d in range(dof):
+                        indices.append(off + d)
+        nodelist = unique(indices).astype(IntType)
+
+    class FixedDirichletBC(DirichletBC):
+        def __init__(self, V, g, nodelist):
+            self.nodelist = nodelist
+            DirichletBC.__init__(self, V, g, "on_boundary")
+
+        @utils.cached_property
+        def nodes(self):
+            return self.nodelist
+
+    dim = V.mesh().topological_dimension()
+    bc = FixedDirichletBC(V, ufl.zero(V.ufl_element().value_shape()), nodelist)
+    return bc
 
 class CoarseCellPatches(object):
     def __call__(self, pc):
@@ -93,6 +180,7 @@ class ASMPCCoarseCellPatches(ASMPatchPC):
 
     _prefix = "pc_coarsecell_"
 
+    @timed_function("CoarseCell.get_patches")
     def get_patches(self, V):
         from firedrake.mg.utils import get_level
         from firedrake.cython.mgimpl import get_entity_renumbering
@@ -135,10 +223,77 @@ class ASMPCCoarseCellPatches(ASMPatchPC):
             patches.append(iset)
         return patches
 
+class ASMPCHexCoarseCellPatches(ASMPatchPC):
+
+    _prefix = "pc_coarsecell_"
+
+    @timed_function("HexCoarseCell.get_patches")
+    def get_patches(self, V):
+        mesh = V._mesh
+        (mh, level) = get_level(mesh)
+        nlayers = mesh.layers
+        mesh_dm = mesh._topology_dm
+
+
+        # Accessing .indices causes the allocation of a global array,
+        # so we need to cache these for efficiency
+        V_local_ises_indices = []
+        for (i, W) in enumerate(V):
+            V_local_ises_indices.append(V.dof_dset.local_ises[i].indices)
+
+        
+        basemeshoff = []
+        basemeshdof = []
+        dm = mesh._topology_dm
+
+        for (i, W) in enumerate(V):
+            boff, bdof = get_basemesh_nodes(W)
+            basemeshoff.append(boff)
+            basemeshdof.append(bdof)
+
+        # Build index sets for the patches
+        ises = []
+        (start, end) = mesh_dm.getDepthStratum(0)
+        for seed in range(start, end):
+            # Only build patches over owned DoFs
+            if mesh_dm.getLabelValue("pyop2_ghost", seed) != -1:
+                continue
+            value = mesh_dm.getLabelValue("prolongation", seed)
+            if (value > -1 and value <= level):
+                continue
+
+            # Create point list from mesh DM
+            pt_array, _ = mesh_dm.getTransitiveClosure(seed, useCone=False)
+            for k in range(1, nlayers, 2):
+                indices = []
+                # Get DoF indices for patch
+                for (i, W) in enumerate(V):
+                    section = W.dm.getDefaultSection()
+                    degree = W.ufl_element().degree()[1]
+                    for p in pt_array.tolist():
+                        dof = basemeshdof[i][p]
+                        if dof <= 0:
+                            continue
+                        off = basemeshoff[i][p]
+                        if k == 0:
+                            begin = off
+                            end = off+dof+(degree-1)*dof
+                        elif k == nlayers-1:
+                            begin = off+k*degree*dof-(degree-1)*dof
+                            end = off+dof+k*degree*dof
+                        else:
+                            begin = off+k*degree*dof-(degree-1)*dof
+                            end = off+dof+k*degree*dof+(degree-1)*dof
+                        W_indices = np.arange(W.value_size*begin, W.value_size*end, dtype='int32')
+                        indices.extend(V_local_ises_indices[i][W_indices])
+                iset = PETSc.IS().createGeneral(indices, comm=COMM_SELF)
+                ises.append(iset)
+        return ises
+
 
 class AutoSchoeberlTransfer(object):
-    def __init__(self, parameters, tdim, hierarchy, backend='pcpatch', b_matfree=True):
-        assert backend in ['pcpatch', 'tinyasm']
+    def __init__(self, parameters, tdim, hierarchy, backend='pcpatch', b_matfree=True, hexmesh=False):
+        assert backend in ['pcpatch', 'tinyasm', 'petscasm', 'lu']
         self.solver = {}
         self.bcs = {}
         self.rhs = {}
@@ -164,15 +319,21 @@ class AutoSchoeberlTransfer(object):
                 "patch_sub_ksp_type": "preonly",
                 "patch_sub_pc_type": "lu"
             }
-        else:
+        elif backend == 'tinyasm' or backend == 'petscasm':
             if hierarchy == 'bary':
                 raise NotImplementedError('ASMPCCoarseCellMacroPatches not yet implemented')
 
             backendparams = {
                 "mat_type": "aij",
                 "pc_type": "python",
-                "pc_python_type": "alfi.transfer.ASMPCCoarseCellPatches",
-                "pc_coarsecell_backend": 'tinyasm'
+                "pc_python_type": "alfi.transfer.ASMPCHexCoarseCellPatches" if hexmesh else "alfi.transfer.ASMPCCoarseCellPatches",
+                "pc_coarsecell_backend": backend,
+            }
+        else: 
+            backendparams = {
+                "mat_type": "aij",
+                "pc_type": "lu",
+                "pc_factor_mat_solver_type": "mumps",
             }
         self.patchparams = {**patchparams, **backendparams}
         self.b_matfree = b_matfree
@@ -182,44 +343,6 @@ class AutoSchoeberlTransfer(object):
             if hasattr(self, attr):
                 delattr(self, attr)
 
-    @staticmethod
-    def fix_coarse_boundaries(V):
-        hierarchy, level = get_level(V.mesh())
-        dm = V.mesh()._topology_dm
-
-        section = V.dm.getDefaultSection()
-        indices = []
-        fStart, fEnd = dm.getHeightStratum(1)
-        # Spin over faces, if the face is marked with a magic label
-        # value, it means it was in the coarse mesh.
-        for p in range(fStart, fEnd):
-            value = dm.getLabelValue("prolongation", p)
-            if value > -1 and value <= level:
-                # OK, so this is a coarse mesh face.
-                # Grab all the points in the closure.
-                closure, _ = dm.getTransitiveClosure(p)
-                for c in closure:
-                    # Now add all the dofs on that point to the list
-                    # of boundary nodes.
-                    dof = section.getDof(c)
-                    off = section.getOffset(c)
-                    for d in range(dof):
-                        indices.append(off + d)
-        nodelist = unique(indices).astype(IntType)
-
-        class FixedDirichletBC(DirichletBC):
-            def __init__(self, V, g, nodelist):
-                self.nodelist = nodelist
-                DirichletBC.__init__(self, V, g, "on_boundary")
-
-            @utils.cached_property
-            def nodes(self):
-                return self.nodelist
-
-        dim = V.mesh().topological_dimension()
-        bc = FixedDirichletBC(V, ufl.zero(V.ufl_element().value_shape()), nodelist)
-
-        return bc
 
     def bform(self, rhs):
         a = get_appctx(rhs.function_space().dm).J
@@ -271,9 +394,10 @@ class AutoSchoeberlTransfer(object):
 
         if firsttime:
             from firedrake.solving_utils import _SNESContext
-            bcs = self.fix_coarse_boundaries(V)
+            bcs = fix_coarse_boundaries(V)
             a = self.form(V)
             A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"])
+
 
             tildeu, rhs = Function(V), Function(V)
 
@@ -365,6 +489,7 @@ class AutoSchoeberlTransfer(object):
         #     warning("From mesh %i to %i" % (coarse.function_space().dim(), fine.function_space().dim()))
         #     warning("Energy norm ratio from %.2f to %.2f" % ((energy_norm(rhs)/energy_norm(coarse)), energy_norm(fine)/energy_norm(coarse)))
 
+    @timed_function('standard_transfer')
     def standard_transfer(self, source, target, mode):
         if mode == "prolong":
             prolong(source, target)
@@ -447,7 +572,9 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
             raise NotImplementedError
 
 class AlgebraicSchoeberlTransfer(object):
-    def __init__(self, parameters, A_callback, BTWB_callback, tdim, hierarchy):
+    def __init__(self, parameters, A_callback, BTWB_callback, tdim, hierarchy, backend='tinyasm', hexmesh=False):
+        assert backend in ['tinyasm', 'petscasm', 'lu']
+        assert hierarchy == 'uniform'
         self.tdim = tdim
         self.solver = {}
         self.bcs = {}
@@ -461,11 +588,22 @@ class AlgebraicSchoeberlTransfer(object):
             "ksp_type": "preonly",
             "ksp_convergence_test": "skip",
             "mat_type": "aij",
-            "pc_type": "python",
-            "pc_python_type": "alfi.transfer.ASMPCCoarseCellPatches",
-            "pc_coarsecell_backend": 'tinyasm'
         }
-        self.patchparams = patchparams
+        if backend in ['tinyasm', 'petscasm']:
+            backendparams = {
+                "pc_type": "python",
+                "pc_python_type": "alfi.transfer.ASMPCHexCoarseCellPatches" if hexmesh else "alfi.transfer.ASMPCCoarseCellPatches",
+                "pc_coarsecell_backend": backend,
+                # "pc_coarsecell_sub_pc_asm_sub_mat_type": "seqaij",
+                # "pc_coarsecell_sub_sub_pc_factor_mat_solver_type": "umfpack",
+            }
+        else:
+            backendparams = {
+                "pc_type": "lu",
+                "pc_factor_mat_solver_type": "mumps",
+            }
+        self.patchparams = {**patchparams, **backendparams}
+
         self.A_callback = A_callback
         self.BTWB_callback = BTWB_callback
 
@@ -474,44 +612,6 @@ class AlgebraicSchoeberlTransfer(object):
             if hasattr(self, attr):
                 delattr(self, attr)
 
-    @staticmethod
-    def fix_coarse_boundaries(V):
-        hierarchy, level = get_level(V.mesh())
-        dm = V.mesh()._topology_dm
-
-        section = V.dm.getDefaultSection()
-        indices = []
-        fStart, fEnd = dm.getHeightStratum(1)
-        # Spin over faces, if the face is marked with a magic label
-        # value, it means it was in the coarse mesh.
-        for p in range(fStart, fEnd):
-            value = dm.getLabelValue("prolongation", p)
-            if value > -1 and value <= level:
-                # OK, so this is a coarse mesh face.
-                # Grab all the points in the closure.
-                closure, _ = dm.getTransitiveClosure(p)
-                for c in closure:
-                    # Now add all the dofs on that point to the list
-                    # of boundary nodes.
-                    dof = section.getDof(c)
-                    off = section.getOffset(c)
-                    for d in range(dof):
-                        indices.append(off + d)
-        nodelist = unique(indices).astype(IntType)
-
-        class FixedDirichletBC(DirichletBC):
-            def __init__(self, V, g, nodelist):
-                self.nodelist = nodelist
-                DirichletBC.__init__(self, V, g, "on_boundary")
-
-            @utils.cached_property
-            def nodes(self):
-                return self.nodelist
-
-        dim = V.mesh().topological_dimension()
-        bc = FixedDirichletBC(V, ufl.zero(V.ufl_element().value_shape()), nodelist)
-
-        return bc
 
     def force_rebuild(self):
         self.force_rebuild_d = {}
@@ -556,7 +656,7 @@ class AlgebraicSchoeberlTransfer(object):
         _, level = get_level(V.ufl_domain())
         if firsttime:
             from firedrake.solving_utils import _SNESContext
-            bcs = self.fix_coarse_boundaries(V)
+            bcs = fix_coarse_boundaries(V)
             A = self.A_callback(level, mat=None)
             BTWB = self.BTWB_callback(level, mat=None)
 
@@ -564,7 +664,7 @@ class AlgebraicSchoeberlTransfer(object):
             A.petscmat.axpy(1, BTWB, A.petscmat.Structure.SUBSET_NONZERO_PATTERN)
             A.petscmat.setLGMap(rmap, cmap)
             for i in range(self.tdim):
-                A.petscmat.zeroRows(i+bcs.nodes*self.tdim, 1.0)
+                A.petscmat.zeroRowsLocal(i+bcs.nodes*self.tdim, 1.0)
 
             tildeu, rhs = Function(V), Function(V)
 
@@ -599,7 +699,7 @@ class AlgebraicSchoeberlTransfer(object):
                 self.BTWB_callback(level, mat=BTWB)
                 A.petscmat += BTWB
                 for i in range(self.tdim):
-                    A.petscmat.zeroRows(i+bcs.nodes*self.tdim, 1.0)
+                    A.petscmat.zeroRowsLocal(i+bcs.nodes*self.tdim, 1.0)
                 self.tensors[key] = A, b, BTWB
                 # A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
                 #self.prev_parameters[key] = [float(param) for param in self.parameters]
@@ -632,11 +732,32 @@ class AlgebraicSchoeberlTransfer(object):
             self.standard_transfer(rhs, coarse, "restrict")
 
 
-        # def energy_norm(u):
-        #     return assemble(action(action(self.form(u.function_space()), u), u))
+        def h1_norm(u):
+            return assemble(inner(grad(u), grad(u)) * dx)
+
+        def energy_norm(u):
+            v = u.copy(deepcopy=True)
+            with u.dat.vec_ro as x:
+                with v.dat.vec_wo as y:
+                    A.petscmat.mult(x, y)
+                    res = x.dot(y)
+            return res
+
+        def divergence_norm(u):
+            v = u.copy(deepcopy=True)
+            with u.dat.vec_ro as x:
+                with v.dat.vec_wo as y:
+                    BTWB.mult(x, y)
+                    res = x.dot(y)
+            return res
+
         # if mode == "prolong":
         #     warning("From mesh %i to %i" % (coarse.function_space().dim(), fine.function_space().dim()))
-        #     warning("Energy norm ratio from %.2f to %.2f" % ((energy_norm(rhs)/energy_norm(coarse)), energy_norm(fine)/energy_norm(coarse)))
+        #     warning("Energy norm from %.4f to %.4f" % (energy_norm(rhs), energy_norm(fine)))
+        #     warning("H1 norm from %.4f to %.4f" % (h1_norm(rhs), h1_norm(fine)))
+        #     warning("Divergence norm from %.4f to %.4f" % (divergence_norm(rhs), divergence_norm(fine)))
+        #     File('/tmp/tmp.pvd').write(b)
+        #     import sys; sys.exit()
 
     def standard_transfer(self, source, target, mode):
         if mode == "prolong":
