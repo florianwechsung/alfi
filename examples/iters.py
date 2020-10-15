@@ -11,7 +11,8 @@ import os
 
 parser = get_default_parser()
 parser.add_argument("--problem", type=str, required=True,
-                    choices=["ldc2d", "bfs2d", "ldc3d", "bfs3d"])
+                    choices=["ldc2d", "bfs2d", "ldc3d", "bfs3d",
+                             "planarlattice2d", "potentialflow2d", "superposition2d"])
 parser.add_argument("--diagonal", type=str, default="left",
                     choices=["left", "right", "crossed"])
 parser.add_argument("--mesh", type=str)
