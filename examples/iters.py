@@ -32,13 +32,13 @@ elif args.problem == "ldc3d":
 elif args.problem == "bfs3d":
     problem = ThreeDimBackwardsFacingStepProblem(args.mesh)
 elif args.problem == "planarlattice2d":
-    problem = PlanarLattice2DProblem(args.mesh)
+    problem = PlanarLattice2DProblem(args.baseN, args.diagonal)
     from_zero_each_time = True
 elif args.problem == "potentialflow2d":
-    problem = Potentialflow2DProblem(args.mesh)
+    problem = Potentialflow2DProblem(args.baseN, args.diagonal)
     from_zero_each_time = True
 elif args.problem == "superposition2d":
-    problem = Superposition2DProblem(args.mesh)
+    problem = Superposition2DProblem(args.baseN, args.diagonal)
     from_zero_each_time = True
 else:
     raise NotImplementedError
@@ -58,7 +58,7 @@ for nref in nrefs:
     args.nref = nref
     solver = get_solver(args, problem)
     dofs[nref] = solver.Z.dim()
-    results_temp = run_solver(solver, res, args)
+    results_temp = run_solver(solver, res, args, from_zero_each_time=from_zero_each_time)
     results[nref] = {re: results_temp[re] for re in tableres if re in results_temp.keys()}
     comm = solver.mesh.comm
 
