@@ -94,7 +94,8 @@ class NavierStokesSolver(object):
                  patch_composition="additive", restriction=False, smoothing=None,
                  rebalance_vertices=False,
                  hierarchy_callback=None,
-                 high_accuracy=False
+                 high_accuracy=False,
+                 lag_stabilisation=False,
                  ):
 
         assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
@@ -117,6 +118,7 @@ class NavierStokesSolver(object):
         self.restriction = restriction
         self.smoothing = smoothing
         self.high_accuracy = high_accuracy
+        self.lag_stabilisation = lag_stabilisation
 
         def rebalance(dm, i):
             if rebalance_vertices:
@@ -153,6 +155,7 @@ class NavierStokesSolver(object):
         self.area = assemble(Constant(1, domain=mh[0])*dx)
         nu = Constant(1.0)
         self.nu = nu
+        problem.nu = nu
         self.char_L = problem.char_length()
         self.char_U = problem.char_velocity()
         Re = self.char_L*self.char_U / nu
@@ -232,23 +235,26 @@ class NavierStokesSolver(object):
             sys.stdout.flush()
 
         self.z_last = z.copy(deepcopy=True)
+        self.beta = self.problem.wind(self.Z.sub(0)) or u
 
 
         F = self.residual()
+        Fnostab = F
 
         """ Stabilisation """
-        wind = split(self.z_last)[0]
+        wind = self.problem.wind(self.Z.sub(0)) or u
+        Lvwind = self.problem.wind(self.Z.sub(0)) or split(self.z_last)[0]
         rhs = problem.rhs(Z)
         if self.stabilisation_type in ["gls", "supg"]:
             if supg_method == "turek":
-                self.stabilisation = TurekSUPG(Re, self.Z.sub(0), state=u, h=problem.mesh_size(u), magic=supg_magic, weight=stabilisation_weight)
+                self.stabilisation = TurekSUPG(Re, self.Z.sub(0), wind=wind, h=problem.mesh_size(u), magic=supg_magic, weight=stabilisation_weight)
             elif supg_method == "shakib":
-                self.stabilisation = ShakibHughesZohanSUPG(1.0/nu, self.Z.sub(0), state=u, h=problem.mesh_size(u, "cell"), magic=supg_magic, weight=stabilisation_weight)
+                self.stabilisation = ShakibHughesZohanSUPG(1.0/nu, self.Z.sub(0), wind=wind, h=problem.mesh_size(u, "cell"), magic=supg_magic, weight=stabilisation_weight)
             else:
                 raise NotImplementedError
 
             Lu = -nu * div(2*sym(grad(u))) + dot(grad(u), u) + grad(p)
-            Lv = -nu * div(2*sym(grad(v))) + dot(grad(v), wind) + grad(q)
+            Lv = -nu * div(2*sym(grad(v))) + dot(grad(v), Lvwind) + grad(q)
             if rhs is not None:
                 Lu -= rhs[0]
             k = Z.sub(0).ufl_element().degree()
@@ -259,7 +265,7 @@ class NavierStokesSolver(object):
             else:
                 raise NotImplementedError
         elif self.stabilisation_type == "burman":
-            self.stabilisation = BurmanStabilisation(self.Z.sub(0), state=u, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
+            self.stabilisation = BurmanStabilisation(self.Z.sub(0), wind=wind, h=problem.mesh_size(u, "facet"), weight=stabilisation_weight)
             self.stabilisation_form = self.stabilisation.form(u, v)
         else:
             self.stabilisation = None
@@ -271,8 +277,10 @@ class NavierStokesSolver(object):
         if rhs is not None:
             F -= inner(rhs[0], v) * dx + inner(rhs[1], q) * dx
 
+        J = derivative(Fnostab, z) if lag_stabilisation else derivative(F, z)
+
         appctx = {"nu": self.nu, "gamma": self.gamma}
-        problem = NonlinearVariationalProblem(F, z, bcs=bcs)
+        problem = NonlinearVariationalProblem(F, z, bcs=bcs, J=J)
         self.bcs = bcs
         self.params = params
         self.nsp = nsp
@@ -303,7 +311,7 @@ class NavierStokesSolver(object):
         # self.gamma.assign(1+re)
 
         if self.stabilisation is not None:
-            self.stabilisation.update(self.z.split()[0])
+            self.stabilisation.update(self.beta)
         start = datetime.now()
         self.solver.solve()
         end = datetime.now()
@@ -602,7 +610,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
             + self.gamma * inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
-            + self.advect * inner(dot(grad(u), u), v)*dx
+            + self.advect * inner(dot(grad(u), self.beta), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
         )
@@ -653,7 +661,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
             + self.gamma * inner(div(u), div(v))*dx
-            + self.advect * inner(dot(grad(u), u), v)*dx
+            + self.advect * inner(dot(grad(u), self.beta), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
         )
@@ -670,22 +678,24 @@ class ScottVogeliusSolver(NavierStokesSolver):
         V = self.Z.sub(0)
         Q = self.Z.sub(1)
         if self.stabilisation_type in ["burman", None]:
-            qtransfer = NullTransfer()
+            qinject = NullTransfer().inject
         elif self.stabilisation_type in ["gls", "supg"]:
-            qtransfer = EmbeddedDGTransfer(V.ufl_element())
+            if self.lag_stabilisation: # we don't need to inject pressure then
+                qinject = NullTransfer().inject
+            else:
+                qinject = inject
         else:
             raise ValueError("Unknown stabilisation")
-        self.qtransfer = qtransfer
         if self.hierarchy == "bary":
             vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
             self.vtransfer = vtransfer
             transfers = {
                 V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
-                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+                Q.ufl_element(): (prolong, restrict, qinject)
             }
         else:
             transfers = {
-                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
+                Q.ufl_element(): (prolong, restrict, qinject)
             }
         return transfers
 
@@ -710,7 +720,7 @@ class TaylorHoodSolver(NavierStokesSolver):
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
             + self.gamma * inner(div(u), div(v))*dx
-            + self.advect * inner(dot(grad(u), u), v)*dx
+            + self.advect * inner(dot(grad(u), self.beta), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
         )

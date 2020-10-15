@@ -45,6 +45,8 @@ def get_default_parser():
     parser.add_argument("--high-accuracy", dest="high_accuracy", default=False,
                         action="store_true")
     parser.add_argument("--smoothing", type=int, default=None)
+    parser.add_argument("--lag-stabilisation", dest="lag_stabilisation", default=False,
+                        action="store_true")
     return parser
 
 
@@ -70,6 +72,7 @@ def get_solver(args, problem, hierarchy_callback=None):
         smoothing=args.smoothing,
         rebalance_vertices=args.rebalance,
         high_accuracy=args.high_accuracy,
+        lag_stabilisation=args.lag_stabilisation,
         hierarchy_callback=hierarchy_callback,
     )
     return solver
@@ -93,7 +96,7 @@ def performance_info(comm, solver):
             print(BLUE % ("% 5.1fs \t % 4.2fs \t %i" % (time, 1000*time/solver.Z.dim(), solver.Z.dim())))
 
 
-def run_solver(solver, res, args):
+def run_solver(solver, res, args, from_zero_each_time=False):
     if args.time:
         PETSc.Log.begin()
     problemsize = solver.Z.dim()
@@ -105,7 +108,7 @@ def run_solver(solver, res, args):
     comm = solver.mesh.mpi_comm()
     comm.Barrier()
     if args.paraview:
-        pvdf = File(outdir + "velocity.pvd")
+        pvdf = File(outdir + "solution.pvd")
     if args.checkpoint:
         os.makedirs(chkptdir, exist_ok=True)
     results = {}
@@ -114,13 +117,26 @@ def run_solver(solver, res, args):
             with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_READ) as checkpoint:
                 checkpoint.load(solver.z, name="up_%i" % re)
         except:
-            (z, info_dict) = solver.solve(re)
-            results[re] = info_dict
-            if args.checkpoint:
-                with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_UPDATE) as checkpoint:
-                    checkpoint.store(solver.z, name="up_%i" % re)
+            try:
+                if from_zero_each_time:
+                    solver.z.assign(0)
+                (z, info_dict) = solver.solve(re)
+                results[re] = info_dict
+                if args.checkpoint:
+                    with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_UPDATE) as checkpoint:
+                        checkpoint.store(solver.z, name="up_%i" % re)
+            except:
+                results[re] = {
+                    "Re": re,
+                    "nu": solver.nu.values()[0],
+                    "linear_iter": float('nan'),
+                    "nonlinear_iter": float('nan'),
+                    "time": float('nan'),
+                }
+                break
+
         if args.paraview:
-            pvdf.write(solver.visprolong(solver.z.split()[0]), time=re)
+            pvdf.write(*solver.z.split(), time=re)
 
     if comm.rank == 0:
         for re in results:

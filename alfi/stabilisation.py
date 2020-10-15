@@ -5,19 +5,20 @@ from firedrake.mg.utils import get_level
 
 class Stabilisation(object):
 
-    def __init__(self, V, state=None, weight=None):
+    def __init__(self, V, wind=None, weight=None):
         self.V = V
         self.mesh = V.ufl_domain()
-        if state is None:
+        if wind is None:
             self.wind = Function(V, name="Wind")
-            self.separate_wind = True
+            self.wind_needs_updating = True
         else:
-            self.wind = state
-            self.separate_wind = False
+            self.wind = wind
+            self.wind_needs_updating = False
+
         self.weight = Constant(weight) if weight is not None else None
 
     def update(self, w):
-        if not self.separate_wind:
+        if not self.wind_needs_updating:
             return
 
         if isinstance(w, Function):

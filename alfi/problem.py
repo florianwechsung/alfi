@@ -56,3 +56,6 @@ class NavierStokesProblem(object):
 
     def relaxation_direction(self):
         return None
+
+    def wind(self):
+        return None
