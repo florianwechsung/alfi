@@ -527,14 +527,19 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
 
     def form(self, V):
         (nu, gamma) = self.parameters
+        appctx = get_appctx(V.dm).appctx
+        if 'deg' in appctx:
+            deg = appctx['deg']
+        else:
+            deg = None
         u = TrialFunction(V)
         v = TestFunction(V)
         if (callable(nu)):
             (mh, level) = get_level(u.ufl_domain())
-            a = nu(mh[level]) * inner(2*sym(grad(u)), grad(v))*dx + \
+            a = nu(mh[level]) * inner(2*sym(grad(u)), grad(v))*dx(degree=deg) + \
                 gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
         else:
-            a = nu * inner(2*sym(grad(u)), grad(v))*dx + \
+            a = nu * inner(2*sym(grad(u)), grad(v))*dx(degree=deg) + \
                 gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
 
         return a
