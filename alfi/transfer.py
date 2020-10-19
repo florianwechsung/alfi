@@ -669,7 +669,7 @@ class AlgebraicSchoeberlTransfer(object):
             A.petscmat.axpy(1, BTWB, A.petscmat.Structure.SUBSET_NONZERO_PATTERN)
             A.petscmat.setLGMap(rmap, cmap)
             for i in range(self.tdim):
-                A.petscmat.zeroRowsLocal(i+bcs.nodes*self.tdim, 1.0)
+                A.petscmat.zeroRowsColumnsLocal(i+bcs.nodes*self.tdim, 1.0)
 
             tildeu, rhs = Function(V), Function(V)
 
@@ -704,7 +704,7 @@ class AlgebraicSchoeberlTransfer(object):
                 self.BTWB_callback(level, mat=BTWB)
                 A.petscmat += BTWB
                 for i in range(self.tdim):
-                    A.petscmat.zeroRowsLocal(i+bcs.nodes*self.tdim, 1.0)
+                    A.petscmat.zeroRowsColumnsLocal(i+bcs.nodes*self.tdim, 1.0)
                 self.tensors[key] = A, b, BTWB
                 # A = assemble(a, bcs=bcs, mat_type=self.patchparams["mat_type"], tensor=A)
                 #self.prev_parameters[key] = [float(param) for param in self.parameters]
