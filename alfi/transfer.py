@@ -306,6 +306,7 @@ class AutoSchoeberlTransfer(object):
                        "ksp_convergence_test": "skip",
                        }
         if backend == 'pcpatch':
+            assert not hexmesh
             backendparams = {
                 "mat_type": "matfree",
                 "pc_type": "python",
@@ -608,9 +609,11 @@ class AlgebraicSchoeberlTransfer(object):
                 "pc_factor_mat_solver_type": "mumps",
             }
         self.patchparams = {**patchparams, **backendparams}
+        self.backend = backend
 
         self.A_callback = A_callback
         self.BTWB_callback = BTWB_callback
+        self.called_first_restriction = 100 * [False]
 
     def break_ref_cycles(self):
         for attr in ["solver", "bcs", "rhs", "tensors", "parameters", "prev_parameters"]:
@@ -659,22 +662,33 @@ class AlgebraicSchoeberlTransfer(object):
         firsttime = self.bcs.get(key, None) is None
 
         _, level = get_level(V.ufl_domain())
+
+        # When building the PCMG, petsc restricts a constant vector of ones
+        # from the finest level down the hierarchy. At this point the operators
+        # on the levels haven't been built yet, so we just perform a standard
+        # transfer here.
+        if not self.called_first_restriction[level]:
+            self.standard_transfer(source, target, mode)
+            self.called_first_restriction[level] = True
+            return
         if firsttime:
             from firedrake.solving_utils import _SNESContext
-            bcs = fix_coarse_boundaries(V)
-            A = self.A_callback(level, mat=None)
-            BTWB = self.BTWB_callback(level, mat=None)
 
-            rmap, cmap = A.petscmat.getLGMap()
-            A.petscmat.axpy(1, BTWB, A.petscmat.Structure.SUBSET_NONZERO_PATTERN)
-            A.petscmat.setLGMap(rmap, cmap)
-            for i in range(self.tdim):
-                A.petscmat.zeroRowsColumnsLocal(i+bcs.nodes*self.tdim, 1.0)
+            A = self.A_callback(level)
+            bcs = fix_coarse_boundaries(V)
+            if self.backend == "lu":
+                A.petscmat = A.petscmat.copy()
+                for i in range(self.tdim):
+                    A.petscmat.zeroRowsColumnsLocal(i+bcs.nodes*self.tdim, 1.0)
+
+            BTWB = self.BTWB_callback(level)
+
 
             tildeu, rhs = Function(V), Function(V)
 
             b = Function(V)
-            problem = LinearVariationalProblem(a=A.form, L=0, u=tildeu, bcs=bcs)
+            a = A.form
+            problem = LinearVariationalProblem(a=a, L=0, u=tildeu, bcs=bcs)
             ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
                                pmat_type=self.patchparams["mat_type"],
                                appctx={}, options_prefix="prolongation")
@@ -699,6 +713,8 @@ class AlgebraicSchoeberlTransfer(object):
             # Update operator if parameters have changed.
 
             if self.rebuild(key):
+                raise NotImplementedError("Gotta figure out if the PC needs to be forced to be rebuild")
+
                 A = solver.A
                 self.A_callback(level, mat=A)
                 self.BTWB_callback(level, mat=BTWB)
