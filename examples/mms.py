@@ -22,7 +22,7 @@ elif args.dim == 3:
 else:
     raise NotImplementedError
 
-res = [0, 1, 9, 10]#, 50, 90, 100, 400, 500, 900, 1000]
+res = [1]#, 9, 10, 50, 90, 100, 400, 500, 900, 1000]
 results = {}
 for re in res:
     results[re] = {}

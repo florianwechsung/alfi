@@ -736,7 +736,7 @@ class HdivSolver(NavierStokesSolver):
 class RTSolver(HdivSolver):
 
     def function_space(self, mesh, k):
-        eleu = FiniteElement("RT", mesh.ufl_cell(), k)
+        eleu = FiniteElement("RT", mesh.ufl_cell(), k, variant="integral")
         elep = FiniteElement("Discontinuous Lagrange", mesh.ufl_cell(), k-1)
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
@@ -746,7 +746,7 @@ class RTSolver(HdivSolver):
 class BDMSolver(HdivSolver):
 
     def function_space(self, mesh, k):
-        eleu = FiniteElement("BDM", mesh.ufl_cell(), k)
+        eleu = FiniteElement("BDM", mesh.ufl_cell(), k, variant="integral")
         elep = FiniteElement("Discontinuous Lagrange", mesh.ufl_cell(), k-1)
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
