@@ -672,7 +672,7 @@ class HdivSolver(NavierStokesSolver):
         u, p = split(self.z)
         v, q = TestFunctions(self.Z)
         sigma = Constant(10) * self.Z.sub(0).ufl_element().degree()**2
-        h = FacetArea(self.z.ufl_domain())
+        h = CellDiameter(self.z.ufl_domain())
         n = FacetNormal(self.z.ufl_domain())
         ulast = split(self.z_last)[0]
 
