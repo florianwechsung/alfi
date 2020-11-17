@@ -1,4 +1,4 @@
-exec=mpirun -n 4 python3
+exec=mpiexec -n 20 python3
 pre:
 	mkdir -p logs/
 
@@ -27,6 +27,7 @@ iters2dsv: pre
 	$(exec) iters.py --nref-start 1 --nref-end 4 --problem bfs2d --k 2 --mesh coarse09.msh --solver-type almg --discretisation sv --mh bary --stabilisation-type none --patch macro --smoothing 6 --restriction --stabilisation-weight 0 2>&1 | tee logs/iters2dsvbfs09restrict0k2.log
 	$(exec) iters.py --nref-start 1 --nref-end 4 --problem bfs2d --k 3 --mesh coarse09.msh --solver-type almg --discretisation sv --mh bary --stabilisation-type none --patch macro --smoothing 6 --restriction --stabilisation-weight 0 2>&1 | tee logs/iters2dsvbfs09restrict0k3.log
 	$(exec) iters.py --nref-start 1 --nref-end 4 --problem bfs2d --k 2 --mesh coarse09.msh --solver-type almg --discretisation sv --mh bary --stabilisation-type burman --patch macro --smoothing 6 --restriction --stabilisation-weight 5e-3 2>&1 | tee logs/iters2dsvbfs09restrict5em3k2.log
+	$(exec) iters.py --nref-start 1 --nref-end 3 --problem bfs2d --k 2 --mesh coarse09.msh --solver-type almg --discretisation sv --mh bary --stabilisation-type burman --patch macro --smoothing 6 --restriction --stabilisation-weight 5e-3 2>&1 | tee logs/iters2dsvbfs09restrict5em3k2.log
 	$(exec) iters.py --nref-start 1 --nref-end 3 --problem bfs2d --k 3 --mesh coarse09.msh --solver-type almg --discretisation sv --mh bary --stabilisation-type burman --patch macro --smoothing 6 --restriction --stabilisation-weight 5e-3 2>&1 | tee logs/iters2dsvbfs09restrict5em3k3.log
 	
 

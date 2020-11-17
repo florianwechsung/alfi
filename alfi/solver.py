@@ -449,7 +449,7 @@ class NavierStokesSolver(object):
 
         outer_fieldsplit = {
             "mat_type": "nest",
-            "ksp_max_it": 500,
+            "ksp_max_it": 100,
             "pc_type": "fieldsplit",
             "pc_fieldsplit_type": "schur",
             # "pc_fieldsplit_schur_factorization_type": "upper",

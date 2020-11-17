@@ -48,6 +48,9 @@ class Potentialflow2DProblem(NavierStokesProblem):
 
     def relaxation_direction(self): return "0+:1-"
 
+    def wind(self, V):
+        return self.driver(V.ufl_domain())
+
 
 if __name__ == "__main__":
 
