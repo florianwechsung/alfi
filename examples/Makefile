@@ -8,6 +8,10 @@ iters2dpkp0: pre
 	$(exec) iters.py --problem bfs2d --nref-start 1 --nref-end 3 --mesh coarse06.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --smoothing 6 --restriction 2>&1 | tee logs/iters2dbfs06addrestrict6.log
 	$(exec) iters.py --problem bfs2d --nref-start 1 --nref-end 3 --mesh coarse03.msh --discretisation pkp0 --mh uniform --k 2 --solver-type almg --stabilisation-type supg --patch star --smoothing 6 --restriction 2>&1 | tee logs/iters2dbfs03addrestrict6.log
 
+stokeslinke: pre
+	$(exec) iters.py --nref-start 1 --nref-end 3 --problem ldc2d --k 2 --baseN 10 --solver-type allu --discretisation sv --mh bary --stabilisation-type none --re-max 500 --fulltable 2>&1 | tee logs/stokeslinkeallufull.log
+	$(exec) iters.py --nref-start 1 --nref-end 3 --problem ldc2d --k 2 --baseN 10 --solver-type allu --discretisation sv --mh bary --stabilisation-type none --re-max 500 --fulltable --stokes-topleft 2>&1 | tee logs/stokeslinkeallustokes.log
+
 iters2dsvlinke:pre
 	$(exec) iters.py --nref-start 1 --nref-end 4 --problem  planarlattice2d --k 2 --baseN 10 --solver-type almg --discretisation sv --mh bary --stabilisation-type burman --patch macro --smoothing 6 --restriction --stabilisation-weight 5e-3 2>&1 | tee logs/iters2dsvk2planarlattice.log
 	$(exec) iters.py --nref-start 1 --nref-end 4 --problem  planarlattice2d --k 3 --baseN 10 --solver-type almg --discretisation sv --mh bary --stabilisation-type burman --patch macro --smoothing 6 --restriction --stabilisation-weight 5e-3 2>&1 | tee logs/iters2dsvk3planarlattice.log
@@ -45,3 +49,10 @@ idealal:
 	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e2 2>&1 | tee logs/idealalgamma1e2.log || 1
 	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e3 2>&1 | tee logs/idealalgamma1e3.log || 1
 	$(exec) iters.py --baseN 16 --nref-start 2 --nref-end 2 --problem ldc2d --k 2 --solver-type allu --discretisation pkp0 --mh uniform --stabilisation-type supg --smoothing 6 --restriction --time --re-max 10000 --gamma 1e4 2>&1 | tee logs/idealalgamma1e4.log || 1
+
+laggedsupg: pre
+	$(exec) iters.py --nref-start 1 --nref-end 4 --problem ldc2d --k 2 --baseN 10  --solver-type lu   --discretisation sv   --mh bary --stabilisation-type burman --patch macro  --smoothing 6 --restriction --re-max 1000 --fulltable --stabilisation-weight 5e-3                     2>&1 | tee logs/cipnolag.log || 1
+	$(exec) iters.py --nref-start 1 --nref-end 4 --problem ldc2d --k 2 --baseN 10  --solver-type lu   --discretisation sv   --mh bary --stabilisation-type burman --patch macro  --smoothing 6 --restriction --re-max 1000 --fulltable --stabilisation-weight 5e-3 --lag-stabilisation 2>&1 | tee logs/ciplag.log || 1
+	$(exec) iters.py --nref-start 1 --nref-end 4 --problem ldc2d --k 2 --baseN 10  --solver-type lu   --discretisation sv   --mh bary --stabilisation-type supg   --patch macro  --smoothing 6 --restriction --re-max 1000 --fulltable --stabilisation-weight 1                        2>&1 | tee logs/supgnolag.log || 1
+	$(exec) iters.py --nref-start 1 --nref-end 4 --problem ldc2d --k 2 --baseN 10  --solver-type lu   --discretisation sv   --mh bary --stabilisation-type supg   --patch macro  --smoothing 6 --restriction --re-max 1000 --fulltable --stabilisation-weight 1 --lag-stabilisation    2>&1 | tee logs/supglag.log || 1
+	$(exec) iters.py --nref-start 1 --nref-end 4 --problem ldc2d --k 2 --baseN 10  --solver-type almg --discretisation sv   --mh bary --stabilisation-type supg   --patch macro  --smoothing 6 --restriction --re-max 1000 --fulltable --stabilisation-weight 1 --lag-stabilisation    2>&1 | tee logs/supglagalmg.log || 1

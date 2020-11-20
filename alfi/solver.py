@@ -12,6 +12,17 @@ import pprint
 import sys
 from datetime import datetime
 
+class StokesAuxiliaryOperatorPC(AuxiliaryOperatorPC):
+
+    def form(self, pc, test, trial):
+        ctx = self.get_appctx(pc)
+        u, p = split(test)
+        v, q = split(trial)
+        return  (ctx["nu"]*inner(2*sym(grad(u)), grad(v))*dx \
+            + ctx["gamma"]*inner(div(u), div(v))*dx \
+            - p * div(v) * dx \
+            - div(u) * q * dx, ctx["bcs"])
+
 class DGMassInv(PCBase):
 
     def initialize(self, pc):
@@ -96,6 +107,7 @@ class NavierStokesSolver(object):
                  hierarchy_callback=None,
                  high_accuracy=False,
                  lag_stabilisation=False,
+                 stokes_topleft=False,
                  ):
 
         assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
@@ -119,6 +131,7 @@ class NavierStokesSolver(object):
         self.smoothing = smoothing
         self.high_accuracy = high_accuracy
         self.lag_stabilisation = lag_stabilisation
+        self.stokes_topleft = stokes_topleft
 
         def rebalance(dm, i):
             if rebalance_vertices:
@@ -279,7 +292,7 @@ class NavierStokesSolver(object):
 
         J = derivative(Fnostab, z) if lag_stabilisation else derivative(F, z)
 
-        appctx = {"nu": self.nu, "gamma": self.gamma}
+        appctx = {"nu": self.nu, "gamma": self.gamma, "bcs": bcs}
         problem = NonlinearVariationalProblem(F, z, bcs=bcs, J=J)
         self.bcs = bcs
         self.params = params
@@ -447,6 +460,27 @@ class NavierStokesSolver(object):
             # "mat_mumps_icntl_25": 1,
         }
 
+        outer_stokes_fieldsplit = {
+            "mat_type": "nest",
+            "ksp_max_it": 500,
+            "pc_type": "python",
+            "pc_python_type": "alfi.solver.StokesAuxiliaryOperatorPC",
+            "aux": {
+                "pc_type": "fieldsplit",
+                "pc_fieldsplit_type": "schur",
+                "pc_fieldsplit_schur_factorization_type": "full",
+                "pc_fieldsplit_schur_precondition": "user",
+                "fieldsplit_0": {
+                    "allu": fieldsplit_0_lu,
+                    "almg": fieldsplit_0_mg,
+                    "alamg": fieldsplit_0_amg,
+                    "lu": None,
+                    "simple": None,
+                    "lsc": None}[self.solver_type],
+                "fieldsplit_1": fieldsplit_1,
+            }
+        }
+
         outer_fieldsplit = {
             "mat_type": "nest",
             "ksp_max_it": 500,
@@ -552,7 +586,10 @@ class NavierStokesSolver(object):
         elif self.solver_type == "lsc":
             outer = {**outer_base, **outer_lsc}
         else:
-            outer = {**outer_base, **outer_fieldsplit}
+            if self.stokes_topleft:
+                outer = {**outer_base, **outer_stokes_fieldsplit}
+            else:
+                outer = {**outer_base, **outer_fieldsplit}
 
         parameters["default_sub_matrix_type"] = "aij" if self.use_mkl or self.solver_type in ["simple", "lsc"] else "baij"
 

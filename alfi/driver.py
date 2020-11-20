@@ -47,6 +47,8 @@ def get_default_parser():
     parser.add_argument("--smoothing", type=int, default=None)
     parser.add_argument("--lag-stabilisation", dest="lag_stabilisation", default=False,
                         action="store_true")
+    parser.add_argument("--stokes-topleft", dest="stokes_topleft", default=False,
+                        action="store_true")
     return parser
 
 
@@ -73,6 +75,7 @@ def get_solver(args, problem, hierarchy_callback=None):
         rebalance_vertices=args.rebalance,
         high_accuracy=args.high_accuracy,
         lag_stabilisation=args.lag_stabilisation,
+        stokes_topleft=args.stokes_topleft,
         hierarchy_callback=hierarchy_callback,
     )
     return solver
@@ -125,7 +128,10 @@ def run_solver(solver, res, args, from_zero_each_time=False):
                 if args.checkpoint:
                     with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_UPDATE) as checkpoint:
                         checkpoint.store(solver.z, name="up_%i" % re)
-            except:
+            except Exception as e:
+                import sys
+                print("Unexpected error:", sys.exc_info()[0])
+                print(e)
                 results[re] = {
                     "Re": re,
                     "nu": solver.nu.values()[0],

@@ -21,6 +21,8 @@ parser.add_argument("--nref-end", type=int, required=True)
 parser.add_argument("--re-max", type=int, default=10000)
 parser.add_argument("--singular", dest="singular", default=False,
                     action="store_true")
+parser.add_argument("--fulltable", dest="fulltable", default=False,
+                    action="store_true")
 args, _ = parser.parse_known_args()
 from_zero_each_time = False
 if args.problem == "ldc2d":
@@ -52,7 +54,10 @@ if args.problem in ["bfs2d", "bfs3d"]:
     res = list(sorted(res + [50, 150, 250, 350]))
 results = {}
 nrefs = range(args.nref_start, args.nref_end+1)
-tableres = [i for i in [10, 100, 1000, 5000, 10000] if i <= max(res)]
+if args.fulltable:
+    tableres = res
+else:
+    tableres = [i for i in [10, 100, 1000, 5000, 10000] if i <= max(res)]
 dofs = {}
 for nref in nrefs:
     args.nref = nref
