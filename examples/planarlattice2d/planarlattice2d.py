@@ -6,15 +6,14 @@ import numpy as np
 
 class PlanarLattice2DProblem(NavierStokesProblem):
     """ 
-    This implements the numerical example 2 from https://arxiv.org/pdf/2007.04012.pdf 
+    This implements the numerical example 2 from
+    https://arxiv.org/pdf/2007.04012.pdf 
+    i.e.
 
-
-    u = (sin(2πx)*sin(2πy), cos(2πx)*cos(2πy))
-    p = (cos(4πx)−cos(4πy))/4
-    f = − μ∆u
-    wind = u
-
-    with 
+        u = (sin(2πx)*sin(2πy), cos(2πx)*cos(2πy))
+        p = (cos(4πx)−cos(4πy))/4
+        f = − μ∆u
+        wind = u
 
     """
 

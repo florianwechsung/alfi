@@ -6,16 +6,15 @@ import numpy as np
 
 class Potentialflow2DProblem(NavierStokesProblem):
     """ 
-    This implements the numerical example 1 from https://arxiv.org/pdf/2007.04012.pdf 
+    This implements the numerical example 1 from
+    https://arxiv.org/pdf/2007.04012.pdf 
+    i.e.
 
-
-    h = x^3 - 3*x*y*y
-    u = ∇h
-    p = −(|∇h|^2)/2 + 14/5
-    f = 0
-    wind = u
-
-    with 
+        h = x^3 - 3*x*y*y
+        u = ∇h
+        p = −(|∇h|^2)/2 + 14/5
+        f = 0
+        wind = u
 
     """
 

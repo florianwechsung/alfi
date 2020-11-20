@@ -243,6 +243,7 @@ class NavierStokesSolver(object):
 
         """ Stabilisation """
         wind = self.problem.wind(self.Z.sub(0)) or u
+        # use this wind for testing in the GLS stabilisation (has to be linear, so we lag the solution)
         Lvwind = self.problem.wind(self.Z.sub(0)) or split(self.z_last)[0]
         rhs = problem.rhs(Z)
         if self.stabilisation_type in ["gls", "supg"]:
@@ -709,22 +710,7 @@ class ScottVogeliusSolver(NavierStokesSolver):
         return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}
 
 
-class TaylorHoodSolver(NavierStokesSolver):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def residual(self):
-        u, p = split(self.z)
-        v, q = TestFunctions(self.Z)
-        F = (
-            self.nu * inner(2*sym(grad(u)), grad(v))*dx
-            + self.gamma * inner(div(u), div(v))*dx
-            + self.advect * inner(dot(grad(u), self.beta), v)*dx
-            - p * div(v) * dx
-            - div(u) * q * dx
-        )
-        return F
+class TaylorHoodSolver(ScottVogeliusSolver):
 
     def function_space(self, mesh, k):
         eleu = VectorElement("Lagrange", mesh.ufl_cell(), k)
@@ -732,35 +718,3 @@ class TaylorHoodSolver(NavierStokesSolver):
         V = FunctionSpace(mesh, eleu)
         Q = FunctionSpace(mesh, elep)
         return MixedFunctionSpace([V, Q])
-
-    def get_transfers(self):
-        V = self.Z.sub(0)
-        Q = self.Z.sub(1)
-        if self.stabilisation_type in ["burman", None]:
-            qtransfer = NullTransfer()
-        elif self.stabilisation_type in ["gls", "supg"]:
-            qtransfer = EmbeddedDGTransfer(V.ufl_element())
-        else:
-            raise ValueError("Unknown stabilisation")
-        self.qtransfer = qtransfer
-        if self.hierarchy == "bary":
-            vtransfer = SVSchoeberlTransfer((self.nu, self.gamma), self.tdim, self.hierarchy)
-            self.vtransfer = vtransfer
-            transfers = {
-                V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
-                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
-            }
-        else:
-            transfers = {
-                Q.ufl_element(): (prolong, restrict, qtransfer.inject)
-            }
-        return transfers
-
-    def configure_patch_solver(self, opts):
-        patchlu3d = "mkl_pardiso" if self.use_mkl else "umfpack"
-        patchlu2d = "petsc"
-        opts["patch_pc_patch_sub_mat_type"] = "seqaij"
-        opts["patch_sub_pc_factor_mat_solver_type"] = patchlu3d if self.tdim > 2 else patchlu2d
-
-    def distribution_parameters(self):
-        return {"partition": True, "overlap_type": (DistributedMeshOverlapType.VERTEX, 2)}

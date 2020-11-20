@@ -6,17 +6,14 @@ import numpy as np
 
 class Superposition2DProblem(NavierStokesProblem):
     """ 
-    This implements the numerical example 4 from https://arxiv.org/pdf/2007.04012.pdf 
+    This implements the numerical example 4 from
+    https://arxiv.org/pdf/2007.04012.pdf This blends planarlattice2d.py and
+    potentialflow2d.py, i.e.
 
-
-    This blends example 2:
-
-    u = (sin(2πx)*sin(2πy), cos(2πx)*cos(2πy))
-    p = (cos(4πx)−cos(4πy))/4
-    wind = u + (0, 1)
-    f = − μ∆u
-
-    with 
+        u = (sin(2πx)*sin(2πy), cos(2πx)*cos(2πy))
+        p = (cos(4πx)−cos(4πy))/4
+        wind = u + (0, 1)
+        f = − μ∆u
 
     """
 

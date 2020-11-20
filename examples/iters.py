@@ -72,7 +72,7 @@ if comm.rank == 0:
             try:
                 avg_ksp_iter = float(results[nref][re]["linear_iter"]
                                      / results[nref][re]["nonlinear_iter"])
-            except:
+            except KeyError:
                 avg_ksp_iter = float('nan')
             line.append(avg_ksp_iter)
         table.append(line)
@@ -90,7 +90,7 @@ if comm.rank == 0:
         for re in tableres:
             try:
                 avg_ksp_iter = float(results[nref][re]["time"]*60)
-            except:
+            except KeyError:
                 avg_ksp_iter = float('nan')
             line.append(avg_ksp_iter)
         table.append(line)
