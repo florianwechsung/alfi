@@ -89,7 +89,7 @@ if comm.rank == 0:
         line = ["%i" % nref, "$%s$" % dofstr]
         for re in tableres:
             try:
-                avg_ksp_iter = float(results[nref][re]["time"]*60)
+                avg_ksp_iter = float(results[nref][re]["time"]*60/results[nref][re]["nonlinear_iter"])
             except KeyError:
                 avg_ksp_iter = float('nan')
             line.append(avg_ksp_iter)
