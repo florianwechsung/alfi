@@ -1,0 +1,140 @@
+#!/bin/bash
+#CASE="p1fb_ldc3d"
+CASE="p1fb_bfs3d"
+#CASE="sv_ldc3d"
+#CASE="sv_bfs3d"
+
+PROCSPERNODE=24
+MEM=''
+
+if [ "$CASE" == "p1fb_ldc3d" ]; then
+    echo Case $CASE
+    NREF=4
+    PROCSPERNODE=12 # for nref=4
+    NODES=$((2*8**(${NREF}-1)))
+    PROBLEM=ldc3d
+    BASEN=18
+    REMAX=5000
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg -log_view \
+--stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --time --re-max $REMAX"
+#--rebalance -dm_rebalance_partition_view"
+    LOG="$CASE-nref-$NREF-nodes-$NODES-baseN-$BASEN-remax-$REMAX"
+    WALLTIME="4:00:00"
+elif [ "$CASE" == "p1fb_bfs3d" ]; then
+    echo Case $CASE
+    NREF=4
+    NODES=$((2*8**(${NREF}-1)))
+    PROCSPERNODE=12 # for nref=4
+    PROBLEM=bfs3d
+    MESH=coarse13
+    REMAX=5000
+    JOB="iters.py --mesh $MESH.msh --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 1 --solver-type almg --discretisation pkp0 --mh uniform --stabilisation-type supg -log_view \
+--stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --time --re-max $REMAX"
+#--rebalance -dm_rebalance_partition_view"
+    LOG="$CASE-nref-$NREF-nodes-$NODES-mesh-$MESH-remax-$REMAX"
+    WALLTIME="5:00:00"
+elif [ "$CASE" == "p1fb_ldc3d_scaling" ]; then
+    echo Case $CASE
+    NREF=1
+    NODES=$((2*8**(${NREF}-1)))
+    PROBLEM=ldc3d
+    BASEN=18
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 1 --discretisation pkp0 --mh uniform --stabilisation-type supg -log_view \
+--stabilisation-weight 0.05 --patch star --smoothing 10 --restriction --re-max 100 \
+--time \
+--solver-type almg --gamma 1e4"
+#--solver-type allu --gamma 1e2"
+#--rebalance -dm_rebalance_partition_view"
+    LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES-baseN-$BASEN-scaling-nobalance-telescope-mglog"
+    #LOG="ldc3d-p1fbp0-nref-$NREF-nodes-$NODES-baseN-$BASEN-scaling-nobalance-almumps"
+    WALLTIME="0:40:00"
+elif [ "$CASE" == "p1fb_ldc2d_scaling" ]; then
+    echo Case $CASE
+    NREF=2
+    NODES=$((2*4**(${NREF}-1)))
+    PROBLEM=ldc2d
+    BASEN=240
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 1 --discretisation pkp0 --mh uniform --stabilisation-type supg \
+--stabilisation-weight 0.05 --patch star --smoothing 6 --restriction --re-max 100 -log_view \
+--time \
+--solver-type almg --gamma 1e4"
+#--rebalance -dm_rebalance_partition_view \
+#--solver-type allu --gamma 1e2"
+    LOG="ldc2d-p2p0-nref-$NREF-nodes-$NODES-baseN-$BASEN-scaling-nobalance-telescope"
+    WALLTIME="0:30:00"
+elif [ "$CASE" == "sv_ldc3d" ]; then
+    echo Case $CASE
+    NREF=3
+    NODES=$((1*8**(${NREF}-1))) # for nref 3
+    #NODES=$((2*8**(${NREF}-1))) # for nref 1, 2
+    PROBLEM=ldc3d
+    BASEN=6
+    REMAX=5000
+    STAB=burman # change remax to 5000 for burman?
+    STABW=5e-3
+    MEM=:bigmem=true
+    PROCSPERNODE=12
+    #PROCSPERNODE=16 # ran nref 1 and 2 with 16 procs per node, but i think 12 is better for performance since we are telescoping onto 24 cores
+    JOB="iters.py --baseN $BASEN --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k 3 --solver-type almg --discretisation sv --mh bary --stabilisation-type $STAB -log_view \
+--stabilisation-weight $STABW --patch macro --smoothing 10 --restriction --time --re-max $REMAX \
+--rebalance -dm_rebalance_partition_view --checkpoint"
+    LOG="$CASE-nref-$NREF-nodes-$NODES-baseN-$BASEN-remax-$REMAX-stab-$STAB-stabw-$STABW"
+    WALLTIME="24:00:00"
+elif [ "$CASE" == "sv_bfs3d" ]; then
+    echo Case $CASE
+    NREF=3
+    NODES=$((4*8**(${NREF}-1))) # for k=3
+    #NODES=$((15*8**(${NREF}-1))) # for k=5
+    PROBLEM=bfs3d
+    MESH=coarse30 # for k=3
+    #MESH=coarse55 # for k=5
+    REMAX=5000
+    #STAB=burman
+    #STABW=5e-3
+    STAB=none
+    STABW=0
+    #MEM=:bigmem=true # turn on when using stabilisation or for k=5
+    PROCSPERNODE=12 # for k=3
+    #PROCSPERNODE=8 # for k=5
+    K=3
+    #K=5
+    JOB="iters.py --mesh $MESH.msh --nref-start $NREF --nref-end $NREF --problem $PROBLEM \
+--k $K --solver-type almg --discretisation sv --mh bary --stabilisation-type $STAB -log_view \
+--stabilisation-weight $STABW --patch macro --smoothing 10 --restriction --time --re-max $REMAX \
+--rebalance -dm_rebalance_partition_view"
+    LOG="$CASE-nref-$NREF-nodes-$NODES-mesh-$MESH-remax-$REMAX-stab-$STAB-stabw-$STABW-k-$K-$MEM"
+    WALLTIME="24:00:00"
+elif [ "$CASE" == "pkp0_mms" ]; then
+    echo Case $CASE
+    NODES=4
+    DIM=2
+    WEIGHT=0.05
+    NREF=4
+    GAMMA=1e4
+    SOLVER=almg
+    JOB="mms.py --dim $DIM --mesh $MESH.msh --nref $NREF --gamma $GAMMA\
+--k 1 --solver-type $SOLVER --discretisation pkp0 --mh uniform -log_view \
+--stabilisation-type supg --stabilisation-weight 0.05 \
+--patch star --smoothing 10 --restriction --time --re-max $REMAX"
+    LOG="$CASE-dim-$DIM-nref-$NREF-nodes-$NODES-gamma-$GAMMA-solver-$SOLVER"
+    WALLTIME="1:00:00"
+fi
+
+JOBNAME=$LOG
+#JOBNAME=${JOBNAME//-/_}
+JOBNAME=SUB_$JOBNAME.pbs
+cp submission_template.pbs $JOBNAME
+echo "  " qsub $JOBNAME
+sed -i "s/_NODES_/$NODES/g" $JOBNAME
+sed -i "s/_NREF_/$NREF/g" $JOBNAME
+sed -i "s/_JOB_/$JOB/g" $JOBNAME
+sed -i "s/_LOG_/$LOG/g" $JOBNAME
+sed -i "s/_WALLTIME_/$WALLTIME/g" $JOBNAME
+sed -i "s/_PROCS_PER_NODE_/$PROCSPERNODE/g" $JOBNAME
+sed -i "s/_MEM_/$MEM/g" $JOBNAME
+qsub $JOBNAME
