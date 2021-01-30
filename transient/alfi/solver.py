@@ -25,6 +25,38 @@ class DGMassInv(PCBase):
         self.massinv = massinv.petscmat
         self.nu = appctx["nu"]
         self.gamma = appctx["gamma"]
+        self.dtinv = appctx["dtinv"]
+        prefix = pc.getOptionsPrefix()
+
+        # dg poisson from fenics demo
+        # Define parameters
+        alpha = 4.0
+        gamma = 8.0
+
+        # Define variational problem
+        n = FacetNormal(V.mesh())
+        h = CellDiameter(V.mesh())
+        h_avg = (h('+') + h('-'))/2
+        a = dot(grad(v), grad(u))*dx \
+            + alpha/h_avg*dot(jump(v, n), jump(u, n))*dS \
+            + Constant(1)*u*v*dx
+            # - dot(avg(grad(v)), jump(u, n))*dS \
+            # - dot(jump(v, n), avg(grad(u)))*dS \
+            # - dot(grad(v), u*n)*ds \
+            # - dot(v*n, grad(u))*ds \
+            # + (gamma/h)*v*u*ds \
+
+        self.Kp = assemble(a)
+#        self.Kp.force_evaluation()
+        Kksp = PETSc.KSP().create(comm=pc.comm)
+        Kksp.incrementTabLevel(1, parent=pc)
+        Kksp.setOptionsPrefix(prefix + "Kp_")
+        Kksp.setOperators(self.Kp.petscmat)
+        Kksp.setUp()
+        Kksp.setFromOptions()
+        self.Kksp = Kksp
+        self.tempvec = self.Kp.petscmat.createVecLeft()
+
 
     def update(self, pc):
         pass
@@ -33,6 +65,12 @@ class DGMassInv(PCBase):
         self.massinv.mult(x, y)
         scaling = float(self.nu) + float(self.gamma)
         y.scale(-scaling)
+        dtinv = float(self.dtinv)
+        if dtinv > 0:
+            self.Kksp.solve(x, self.tempvec)
+            y.axpy(-dtinv, self.tempvec)
+
+
 
     def applyTranspose(self, pc, x, y):
         raise NotImplementedError("Sorry!")
@@ -78,6 +116,7 @@ class NavierStokesSolver(object):
         self.stabilisation_type = stabilisation_type
         self.patch = patch
         self.use_mkl = use_mkl
+        self.dtinv = Constant(0.)
         self.patch_composition = patch_composition
         self.restriction = restriction
         self.smoothing = smoothing
@@ -176,6 +215,9 @@ class NavierStokesSolver(object):
         self.z = z
         (u, p) = split(z)
         (v, q) = split(TestFunction(Z))
+        z_old = Function(Z)
+        self.z_old = z_old
+        (u_old, p_old) = split(z_old)
 
         bcs = problem.bcs(Z)
         nsp = problem.nullspace(Z)
@@ -196,13 +238,13 @@ class NavierStokesSolver(object):
             pprint.pprint(params)
             sys.stdout.flush()
 
-        self.z_last = z.copy(deepcopy=True)
+#        self.z_old = z.copy(deepcopy=True)
 
 
         F = self.residual()
 
         """ Stabilisation """
-        wind = split(self.z_last)[0]
+        wind = split(self.z_old)[0]
         rhs = problem.rhs(Z)
         if self.stabilisation_type in ["gls", "supg"]:
             if supg_method == "turek":
@@ -236,7 +278,7 @@ class NavierStokesSolver(object):
         if rhs is not None:
             F -= inner(rhs[0], v) * dx + inner(rhs[1], q) * dx
 
-        appctx = {"nu": self.nu, "gamma": self.gamma}
+        appctx = {"nu": self.nu, "gamma": self.gamma, "dtinv": self.dtinv}
         problem = NonlinearVariationalProblem(F, z, bcs=bcs)
         self.bcs = bcs
         self.params = params
@@ -254,8 +296,8 @@ class NavierStokesSolver(object):
             self.F = F
             self.bcs = bcs
 
-    def solve(self, re):
-        self.z_last.assign(self.z)
+    def solve(self, re, dt=0):
+        self.z_old.assign(self.z)
         self.message(GREEN % ("Solving for Re = %s" % re))
 
         if re == 0:
@@ -266,6 +308,10 @@ class NavierStokesSolver(object):
             self.advect.assign(1)
             self.nu.assign(self.char_L*self.char_U/re)
         # self.gamma.assign(1+re)
+        if dt > 0:
+            self.dtinv.assign(1./dt)
+        else:
+            self.dtinv.assign(0.)
 
         if self.stabilisation is not None:
             self.stabilisation.update(self.z.split()[0])
@@ -386,7 +432,14 @@ class NavierStokesSolver(object):
         fieldsplit_1 = {
             "ksp_type": "preonly",
             "pc_type": "python",
-            "pc_python_type": "alfi.solver.DGMassInv"
+            "pc_python_type": "alfi.solver.DGMassInv",
+            # "Kp_ksp_type": "preonly",
+            # "Kp_pc_type": "lu",
+            # "Kp_pc_factor_mat_solver_type": "mumps",
+            "Kp_ksp_type": "cg",
+            "Kp_pc_type": "hypre",
+            "Kp_ksp_max_it": 1,
+            "Kp_ksp_convergence_test": "skip",
         }
 
         use_mg = self.solver_type == "almg"
@@ -562,8 +615,11 @@ class ConstantPressureSolver(NavierStokesSolver):
     def residual(self):
         u, p = split(self.z)
         v, q = TestFunctions(self.Z)
-        F = (
-            self.nu * inner(2*sym(grad(u)), grad(v))*dx
+        z_old = Function(self.Z)
+        self.z_old = z_old
+        (u_old, p_old) = split(z_old)
+        F = (self.dtinv * inner(u-u_old, v) * dx
+            + self.nu * inner(2*sym(grad(u)), grad(v))*dx
             + self.gamma * inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
             + self.advect * inner(dot(grad(u), u), v)*dx
             - p * div(v) * dx
@@ -613,8 +669,8 @@ class ScottVogeliusSolver(NavierStokesSolver):
     def residual(self):
         u, p = split(self.z)
         v, q = TestFunctions(self.Z)
-        F = (
-            self.nu * inner(2*sym(grad(u)), grad(v))*dx
+        F = (self.dtinv * inner(u-u_old, v) * dx
+            + self.nu * inner(2*sym(grad(u)), grad(v))*dx
             + self.gamma * inner(div(u), div(v))*dx
             + self.advect * inner(dot(grad(u), u), v)*dx
             - p * div(v) * dx

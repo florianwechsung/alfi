@@ -92,7 +92,7 @@ def performance_info(comm, solver):
             print(BLUE % ("% 5.1fs \t % 4.2fs \t %i" % (time, 1000*time/solver.Z.dim(), solver.Z.dim())))
 
 
-def run_solver(solver, res, args):
+def run_solver(solver, re, nt, dt, args):
     if args.time:
         PETSc.Log.begin()
     problemsize = solver.Z.dim()
@@ -108,22 +108,22 @@ def run_solver(solver, res, args):
     if args.checkpoint:
         os.makedirs(chkptdir, exist_ok=True)
     results = {}
-    for re in res:
+    for i in range(nt):
         try:
-            with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_READ) as checkpoint:
-                checkpoint.load(solver.z, name="up_%i" % re)
+            with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (i), mode=FILE_READ) as checkpoint:
+                checkpoint.load(solver.z, name="up_%i" % i)
         except:
-            (z, info_dict) = solver.solve(re)
-            results[re] = info_dict
+            (z, info_dict) = solver.solve(re,dt=dt)
+            results[i] = info_dict
             if args.checkpoint:
-                with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_UPDATE) as checkpoint:
-                    checkpoint.store(solver.z, name="up_%i" % re)
+                with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (i), mode=FILE_UPDATE) as checkpoint:
+                    checkpoint.store(solver.z, name="up_%i" % i)
         if args.paraview:
-            pvdf.write(solver.visprolong(solver.z.split()[0]), time=re)
+            pvdf.write(solver.visprolong(solver.z.split()[0]), time=i)
 
     if comm.rank == 0:
-        for re in results:
-            print(results[re])
+        for i in results:
+            print(results[i])
     if args.time:
         performance_info(comm, solver)
     return results
