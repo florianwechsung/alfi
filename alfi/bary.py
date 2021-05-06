@@ -428,8 +428,8 @@ def bary(cdm):
     tmp = PETSc.SF().create(comm=sf.comm)
     tmp.setGraph(nroots, None, remote)
     new_remote = numpy.full(nlocal, -2, dtype=IntType)
-    tmp.bcastBegin(MPI.INT, old_to_new_points, new_remote)
-    tmp.bcastEnd(MPI.INT, old_to_new_points, new_remote)
+    tmp.bcastBegin(MPI.INT, old_to_new_points, new_remote, MPI.REPLACE)
+    tmp.bcastEnd(MPI.INT, old_to_new_points, new_remote, MPI.REPLACE)
     tmp.destroy()
 
     for i, point in enumerate(local):
