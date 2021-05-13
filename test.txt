@@ -1,1 +1,4 @@
 git clone `link`
+git add 'file_name'
+git commit -m "in quotes, message" 
+git push
