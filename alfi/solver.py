@@ -1,6 +1,10 @@
+import pprint
+import sys
+from datetime import datetime
+
+import numpy as np
 from firedrake import *
 from firedrake.petsc import *
-import numpy as np
 from mpi4py import MPI
 
 from alfi.stabilisation import *
@@ -8,9 +12,6 @@ from alfi.stabilisation import *
 # from alfi.utilities import coarsen
 from alfi.transfer import *
 
-import pprint
-import sys
-from datetime import datetime
 
 class DGMassInv(PCBase):
 
@@ -45,7 +46,7 @@ class NavierStokesSolver(object):
 
     def residual(self):
         raise NotImplementedError
-    
+
     def update_wind(self, z):
         raise NotImplementedError
 
@@ -132,7 +133,7 @@ class NavierStokesSolver(object):
 
         mesh = mh[-1]
         uviss = []
- 
+
         self.mesh = mesh
         self.load_balance(mesh)
         Z = self.function_space(mesh, k)
@@ -502,7 +503,7 @@ class NavierStokesSolver(object):
 
         if self.solver_type == "lu":
             outer = {**outer_base, **outer_lu}
-        elif self.solver_type == "simple": 
+        elif self.solver_type == "simple":
             outer = {**outer_base, **outer_simple}
         elif self.solver_type == "lsc":
             outer = {**outer_base, **outer_lsc}
