@@ -373,6 +373,7 @@ class DGInjection(object):
         self._DG_inv_mass = {}
         self._mixed_mass = {}
         self._tmp_function = {}
+        self._tmp_vec = {}
 
     def DG_inv_mass(self, DG):
         """
@@ -403,29 +404,58 @@ class DGInjection(object):
             M = assemble_mixed_mass_matrix(V_A, V_B)
             return self._mixed_mass.setdefault(key, M)
 
+    def tmp_vec(self, V):
+        key = (V.ufl_domain().ufl_id(), V.dim())
+        try:
+            return self._tmp_vec[key]
+        except KeyError:
+            return self._tmp_vec.setdefault(key, V.dm.createGlobalVector())
+
     def tmp_function(self, V):
         """
         Construct a temporary work function on a function space.
         """
-        key = V.dim()
+        key = (V.ufl_domain().ufl_id(), V.dim())
         try:
             return self._tmp_function[key]
         except KeyError:
-            u = Function(V)
-            return self._tmp_function.setdefault(key, u)
+            return self._tmp_function.setdefault(key, Function(V))
 
-    def inject(self, fine, coarse):
+    def transfer(self, fine, coarse, inject=True):
+        """Transfer from fine to coarse via injection"""
+        fine_mesh = fine.ufl_domain()
+        coarse_mesh = coarse.ufl_domain()
+        if inject and hasattr(fine_mesh, "redist"):
+            # injection, need to go to original mesh and then inject upwards
+            target = fine_mesh.redist.orig
+            f = self.tmp_function(FunctionSpace(target, fine.ufl_element()))
+            fine_mesh.redist.redist2orig(fine, f)
+            fine = f
+
+        if not inject and hasattr(coarse_mesh, "redist"):
+            # prolongation, need to go down to original mesh and then
+            # push sideways
+            target = coarse_mesh.redist.orig
+            redist_coarse = coarse
+            coarse = self.tmp_function(FunctionSpace(target, coarse.ufl_element()))
+            sideways = lambda c: coarse_mesh.redist.orig2redist(c, redist_coarse)
+        else:
+            sideways = lambda c: None
         V_fine = fine.function_space()
         V_coarse = coarse.function_space()
-
         mixed_mass = self.mixed_mass(V_fine, V_coarse)
         mass_inv = self.DG_inv_mass(V_coarse)
-        tmp = self.tmp_function(V_coarse)
+        tmp = self.tmp_vec(V_coarse)
 
         # Can these be bundled into one with statement?
-        with fine.dat.vec_ro as src, tmp.dat.vec_wo as rhs:
-            mixed_mass.mult(src, rhs)
-        with tmp.dat.vec_ro as rhs, coarse.dat.vec_wo as dest:
-            mass_inv.mult(rhs, dest)
+        with fine.dat.vec_ro as src, coarse.dat.vec_wo as dest:
+            mixed_mass.mult(src, tmp)
+            mass_inv.mult(tmp, dest)
 
-    prolong = inject
+        sideways(coarse) 
+
+    def inject(self, fine, coarse):
+        return self.transfer(fine, coarse, inject=True)
+
+    def prolong(self, fine, coarse):
+        return self.transfer(fine, coarse, inject=False)
