@@ -375,13 +375,18 @@ class DGInjection(object):
         self._tmp_function = {}
         self._tmp_vec = {}
 
+    @staticmethod
+    def _cache_key(*function_spaces):
+        return tuple((f.ufl_domain().ufl_id(), f.dim(), f.ufl_element())
+                     for f in function_spaces)
+
     def DG_inv_mass(self, DG):
         """
         Inverse DG mass matrix
         :arg DG: the DG space
         :returns: A PETSc Mat.
         """
-        key = DG.dim()
+        key = self._cache_key(DG)
         try:
             return self._DG_inv_mass[key]
         except KeyError:
@@ -397,7 +402,7 @@ class DGInjection(object):
         :returns: A PETSc Mat.
         """
         from firedrake.supermeshing import assemble_mixed_mass_matrix
-        key = (V_A.dim(), V_B.dim())
+        key = self._cache_key(V_A, V_B)
         try:
             return self._mixed_mass[key]
         except KeyError:
@@ -405,7 +410,7 @@ class DGInjection(object):
             return self._mixed_mass.setdefault(key, M)
 
     def tmp_vec(self, V):
-        key = (V.ufl_domain().ufl_id(), V.dim())
+        key = self._cache_key(V)
         try:
             return self._tmp_vec[key]
         except KeyError:
@@ -415,7 +420,7 @@ class DGInjection(object):
         """
         Construct a temporary work function on a function space.
         """
-        key = (V.ufl_domain().ufl_id(), V.dim())
+        key = self._cache_key(V)
         try:
             return self._tmp_function[key]
         except KeyError:
