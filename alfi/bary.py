@@ -179,7 +179,7 @@ def bary(cdm):
                         edge_cone = rdm.getCone(edges[start])
                         if edges_orientation[start] == 0:
                             vertex_walk = [edge_cone[0], edge_cone[1], None]
-                        elif edges_orientation[start] == -2:
+                        elif edges_orientation[start] == -1:
                             vertex_walk = [edge_cone[1], edge_cone[0], None]
                         other_edge = (start + 1)%3
                         other_vertices = rdm.getCone(edges[other_edge])
@@ -192,7 +192,7 @@ def bary(cdm):
                         edge_cone = rdm.getCone(edges[start_edge])
                         if edges_orientation[start_edge] == 0:
                             vertex_walk = [edge_cone[1], edge_cone[0], None]
-                        elif edges_orientation[start_edge] == -2:
+                        elif edges_orientation[start_edge] == -1:
                             vertex_walk = [edge_cone[0], edge_cone[1], None]
                         other_edge = (start_edge + 1)%3
                         other_vertices = rdm.getCone(edges[other_edge])
@@ -224,7 +224,7 @@ def bary(cdm):
                     counter = 0
                     for i in ii:
                         edge_cone = rdm.getCone(edges[i])
-                        if edges_orientation[i] == -2:
+                        if edges_orientation[i] == -1:
                             if start >= 0:
                                 forward = False
                             else:
