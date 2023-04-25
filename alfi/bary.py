@@ -18,7 +18,7 @@ def bary(cdm):
     for v in range(*cdm.getDepthStratum(0)):
         cdm.setLabelValue("MacroVertices", v, 1)
 
-    tr = PETSc.DMPlexTransform().create(comm=COMM_WORLD)
+    tr = PETSc.DMPlexTransform().create(comm=cdm.getComm())
     tr.setType(PETSc.DMPlexTransformType.REFINEALFELD)
     tr.setDM(cdm)
     tr.setUp()
