@@ -92,11 +92,13 @@ def BaryMeshHierarchy(mesh, refinement_levels, distribution_parameters=None, cal
 
     barymeshes = [firedrake.Mesh(dm, dim=mesh.ufl_cell().geometric_dimension(),
                                  distribution_parameters=distribution_parameters,
+                                 comm=mesh.comm,
                                  reorder=reorder)
                            for dm in barydms]
 
     meshes = [mesh] + [firedrake.Mesh(dm, dim=mesh.ufl_cell().geometric_dimension(),
                                       distribution_parameters=distribution_parameters,
+                                      comm=mesh.comm,
                                       reorder=reorder)
                        for dm in dms]
 
