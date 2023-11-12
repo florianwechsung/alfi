@@ -26,15 +26,17 @@ class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         return base
 
     def bcs(self, Z):
-        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], [4]),
-               DirichletBC(Z.sub(0), Constant((0., 0.)), [1, 2, 3])]
+        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], 4),
+               DirichletBC(Z.sub(0), Constant((0., 0.)), 1),
+               DirichletBC(Z.sub(0), Constant((0., 0.)), 2),
+               DirichletBC(Z.sub(0), Constant((0., 0.)), 3)]
         return bcs
 
     def has_nullspace(self): return True
 
     def interpolate_initial_guess(self, z):
-        w_expr = self.actual_solution(z)[0]
-        z.sub(0).interpolate(w_expr)
+        w_expr = self.actual_solution(z.function_space().sub(0))[0]
+        z.sub(0).project(w_expr)
 
     def char_length(self): return 2.0
 
@@ -59,7 +61,8 @@ class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         G1 = -24 * y**5+8*y**3-4*y
         u = 8 * f * dg
         v = -8 * df * g
-        p = (8./self.Re) * (F * dddg + df*dg) + 64 * F2 * (g*ddg-dg**2)
+        # p = (8./self.Re) * (F * dddg + df*dg) + 64 * F2 * (g*ddg-dg**2)
+        p = (8.) * (F * dddg + df*dg) + 64 * F2 * (g*ddg-dg**2)
         u = replace(u, {X: 0.5 * X})
         v = replace(v, {X: 0.5 * X})
         p = replace(p, {X: 0.5 * X})
@@ -73,7 +76,8 @@ class TwoDimLidDrivenCavityMMSProblem(NavierStokesProblem):
 
     def rhs(self, Z):
         (u, p) = self.actual_solution(Z)
-        nu = self.char_length() * self.char_velocity() / self.Re
+        nu = self.char_length() * self.char_velocity() / conditional(self.Re>0, self.Re, 1)
         f1 = -nu * div(2*sym(grad(u))) + dot(grad(u), u) + grad(p)
+        # f1 = -nu * div(2*sym(grad(u))) + grad(p)
         f2 = -div(u)
         return f1, f2

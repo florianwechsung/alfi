@@ -22,8 +22,12 @@ class ThreeDimLidDrivenCavityMMSProblem(NavierStokesProblem):
         return base
 
     def bcs(self, Z):
-        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], [4, 5, 6]),
-               DirichletBC(Z.sub(0), Constant((0., 0., 0.)), [1, 2, 3])]
+        bcs = [DirichletBC(Z.sub(0), self.actual_solution(Z)[0], 4),
+               DirichletBC(Z.sub(0), self.actual_solution(Z)[0], 5),
+               DirichletBC(Z.sub(0), self.actual_solution(Z)[0], 6),
+               DirichletBC(Z.sub(0), Constant((0., 0., 0.)), 1),
+               DirichletBC(Z.sub(0), Constant((0., 0., 0.)), 2),
+               DirichletBC(Z.sub(0), Constant((0., 0., 0.)), 3)]
         return bcs
 
     def has_nullspace(self): return True
