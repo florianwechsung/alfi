@@ -171,8 +171,8 @@ class NavierStokesSolver(object):
         if comm.rank == 0:
             print("Number of velocity degrees of freedom: %s (avg %.2f per core)" % (Vdim, Vdim / size))
         z = Function(Z, name="Solution")
-        z.split()[0].rename("Velocity")
-        z.split()[1].rename("Pressure")
+        z.subfunctions[0].rename("Velocity")
+        z.subfunctions[1].rename("Pressure")
         self.z = z
         (u, p) = split(z)
         (v, q) = split(TestFunction(Z))
@@ -268,14 +268,14 @@ class NavierStokesSolver(object):
         # self.gamma.assign(1+re)
 
         if self.stabilisation is not None:
-            self.stabilisation.update(self.z.split()[0])
+            self.stabilisation.update(self.z.subfunctions[0])
         start = datetime.now()
         self.solver.solve()
         end = datetime.now()
 
         if self.nsp is not None:
             # Hardcode that pressure integral is zero
-            (u, p) = self.z.split()
+            (u, p) = self.z.subfunctions
             pintegral = assemble(p*dx)
             p.assign(p - Constant(pintegral/self.area))
 
