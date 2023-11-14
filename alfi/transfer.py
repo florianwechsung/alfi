@@ -272,9 +272,9 @@ class AutoSchoeberlTransfer(object):
             # solver.solve(rhs, fine)
             b = assemble(bform, tensor=b)
             # rhs.assign(fine-b)
-            rhs.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
-            self.standard_transfer(rhs, coarse, "restrict")
-
+            rhs_cofunc = Cofunction(V.dual())
+            rhs_cofunc.dat.data[:] = fine.dat.data_ro - b.dat.data_ro
+            self.standard_transfer(rhs_cofunc, coarse, "restrict")
 
         # def energy_norm(u):
         #     return assemble(action(action(self.form(u.function_space()), u), u))
