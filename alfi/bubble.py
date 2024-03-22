@@ -1,5 +1,5 @@
 from firedrake import *
-from firedrake.assemble import create_assembly_callable
+from firedrake.assemble import OneFormAssembler
 
 """ For the P1 + FacetBubble space in 3D, the standard prolongation does not
 preserve the flux across coarse grid facets.  We fix this with a manual
@@ -36,7 +36,7 @@ class BubbleTransfer(object):
         L = inner(inner(self.fbc, n)/0.625, inner(test, n)) + inner(self.fbc - inner(self.fbc, n)*n, test-inner(test, n)*n)
         L = L*ds + avg(L) * dS
         # This is the guts of assemble(L, tensor=self.rhs), but saves a little time
-        self.assemble_rhs = create_assembly_callable(L, tensor=self.rhs)
+        self.assemble_rhs = OneFormAssembler(L, tensor=self.rhs).assemble
 
         # TODO: Parameterise these by the element definition.
         # These are correct for P1 + FB in 3D.

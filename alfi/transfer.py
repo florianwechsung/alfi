@@ -1,5 +1,4 @@
 from firedrake import *
-from firedrake.assemble import create_assembly_callable
 from firedrake.dmhooks import get_appctx
 from firedrake.petsc import *
 import weakref
