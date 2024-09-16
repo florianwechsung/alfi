@@ -21,7 +21,9 @@ class TwoDimLidDrivenCavityProblem(NavierStokesProblem):
 
     def bcs(self, Z):
         bcs = [DirichletBC(Z.sub(0), self.driver(Z.ufl_domain()), 4),
-               DirichletBC(Z.sub(0), Constant((0., 0.)), [1, 2, 3])]
+               DirichletBC(Z.sub(0), Constant((0, 0)), 1),
+               DirichletBC(Z.sub(0), Constant((0, 0)), 2),
+               DirichletBC(Z.sub(0), Constant((0, 0)), 3)]
         return bcs
 
     def has_nullspace(self): return True
@@ -48,10 +50,14 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
     problem = TwoDimLidDrivenCavityProblem(args.baseN, args.diagonal)
     solver = get_solver(args, problem)
-
-    start = 250
+    start = 500
     end = 10000
     step = 250
     res = [0, 1, 10, 100] + list(range(start, end+step, step))
-    res = [1, 10, 50, 100, 150, 200]# + list(range(start, end+step, step))
+    res = [0, 1, 10, 50, 100, 150, 199, 200]# + list(range(start, end+step, step))
+    res = [0, 1, 0]
     results = run_solver(solver, res, args)
+    u = solver.z.split()[0]
+    print("div(u)",norm(div(u)))
+    divu = Function(solver.Z.sub(1)).project(div(u))
+    File("divu.pvd").write(divu)
