@@ -119,7 +119,7 @@ def run_solver(solver, res, args):
                 with DumbCheckpoint(chkptdir + "nssolution-Re-%s" % (re), mode=FILE_UPDATE) as checkpoint:
                     checkpoint.store(solver.z, name="up_%i" % re)
         if args.paraview:
-            pvdf.write(solver.visprolong(solver.z.split()[0]), time=re)
+            pvdf.write(solver.visprolong(solver.z.subfunctions[0]), time=re)
 
     if comm.rank == 0:
         for re in results:
