@@ -76,7 +76,7 @@ class OrderedRelaxation(object):
 
     @staticmethod
     def get_entities(opts, name, dm):
-        sentinel = object()
+        sentinel = -111
         codim = opts.getInt("pc_patch_construction_%s_codim" % name, default=sentinel)
         if codim == sentinel:
             dim = opts.getInt("pc_patch_construction_%s_dim" % name, default=0)
@@ -86,7 +86,7 @@ class OrderedRelaxation(object):
         return entities
 
     def keyfuncs(self, coords):
-        sentinel = object()
+        sentinel = -111
         sortorders = self.opts.getString("pc_patch_construction_%s_sort_order" % self.name, default=sentinel)
         if sortorders is None or sortorders in [sentinel, "None", ""]:
             return None

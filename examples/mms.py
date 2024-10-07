@@ -46,7 +46,7 @@ for nref in range(1, args.nref+1):
 
         (z, info_dict) = solver.solve(re)
         z = solver.z
-        u, p = z.split()
+        u, p = z.subfunctions
         Z = z.function_space()
 
         # uviz = solver.visprolong(u)

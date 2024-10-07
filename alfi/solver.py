@@ -45,7 +45,7 @@ class NavierStokesSolver(object):
 
     def residual(self):
         raise NotImplementedError
-    
+
     def update_wind(self, z):
         raise NotImplementedError
 
@@ -132,7 +132,7 @@ class NavierStokesSolver(object):
 
         mesh = mh[-1]
         uviss = []
- 
+
         self.mesh = mesh
         self.load_balance(mesh)
         Z = self.function_space(mesh, k)
@@ -171,8 +171,8 @@ class NavierStokesSolver(object):
         if comm.rank == 0:
             print("Number of velocity degrees of freedom: %s (avg %.2f per core)" % (Vdim, Vdim / size))
         z = Function(Z, name="Solution")
-        z.split()[0].rename("Velocity")
-        z.split()[1].rename("Pressure")
+        z.subfunctions[0].rename("Velocity")
+        z.subfunctions[1].rename("Pressure")
         self.z = z
         (u, p) = split(z)
         (v, q) = split(TestFunction(Z))
@@ -268,14 +268,14 @@ class NavierStokesSolver(object):
         # self.gamma.assign(1+re)
 
         if self.stabilisation is not None:
-            self.stabilisation.update(self.z.split()[0])
+            self.stabilisation.update(self.z.subfunctions[0])
         start = datetime.now()
         self.solver.solve()
         end = datetime.now()
 
         if self.nsp is not None:
             # Hardcode that pressure integral is zero
-            (u, p) = self.z.split()
+            (u, p) = self.z.subfunctions
             pintegral = assemble(p*dx)
             p.assign(p - Constant(pintegral/self.area))
 
@@ -502,7 +502,7 @@ class NavierStokesSolver(object):
 
         if self.solver_type == "lu":
             outer = {**outer_base, **outer_lu}
-        elif self.solver_type == "simple": 
+        elif self.solver_type == "simple":
             outer = {**outer_base, **outer_simple}
         elif self.solver_type == "lsc":
             outer = {**outer_base, **outer_lsc}
