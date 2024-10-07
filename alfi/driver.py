@@ -26,7 +26,7 @@ def get_default_parser():
     parser.add_argument("--stabilisation-type", type=str, default=None,
                         choices=["none", "burman", "gls", "supg"])
     parser.add_argument("--discretisation", type=str, required=True,
-                        choices=["pkp0", "sv"])
+                        choices=["pkp0", "gn", "br", "sv"])
     parser.add_argument("--gamma", type=float, default=1e4)
     parser.add_argument("--clear", dest="clear", default=False,
                         action="store_true")
@@ -50,9 +50,12 @@ def get_default_parser():
 
 def get_solver(args, problem, hierarchy_callback=None):
     solver_t = {"pkp0": ConstantPressureSolver,
+                "gn": ConstantPressureSolver,
+                "br": ConstantPressureSolver,
                 "sv": ScottVogeliusSolver}[args.discretisation]
     solver = solver_t(
         problem,
+        family=args.discretisation,
         solver_type=args.solver_type,
         stabilisation_type=args.stabilisation_type,
         nref=args.nref,

@@ -52,7 +52,7 @@ class NavierStokesSolver(object):
     def set_transfers(self):
         raise NotImplementedError
 
-    def __init__(self, problem, nref=1, solver_type="almg",
+    def __init__(self, problem, family=None, nref=1, solver_type="almg",
                  stabilisation_type=None,
                  supg_method="shakib", supg_magic=9.0, gamma=10000, nref_vis=1,
                  k=5, patch="star", hierarchy="bary", use_mkl=False, stabilisation_weight=None,
@@ -62,6 +62,8 @@ class NavierStokesSolver(object):
                  high_accuracy=False
                  ):
 
+        assert family in {"sv", "pkp0", "gn", "br"}
+        self.family = family
         assert solver_type in {"almg", "allu", "lu", "simple", "lsc"}, "Invalid solver type %s" % solver_type
         if stabilisation_type == "none":
             stabilisation_type = None
@@ -115,7 +117,7 @@ class NavierStokesSolver(object):
         self.parallel = mh[0].comm.size > 1
         self.tdim = mh[0].topological_dimension()
         self.mh = mh
-        self.area = assemble(Constant(1, domain=mh[0])*dx)
+        self.area = assemble(1*dx(domain=mh[0]))
         nu = Constant(1.0)
         self.nu = nu
         self.char_L = problem.char_length()
@@ -559,12 +561,23 @@ class ConstantPressureSolver(NavierStokesSolver):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    def augmented_lagrangian(self, u, v):
+        from finat.quadrature import make_quadrature
+        V = self.Z[0]
+        if V.ufl_element().family() == "Guzman-Neilan":
+            # Override macro quadrature rule
+            cell = V.finat_element.cell
+            al = inner(div(u), div(v))*dx(scheme=make_quadrature(cell, 0))
+        else:
+            al = inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        return al
+
     def residual(self):
         u, p = split(self.z)
         v, q = TestFunctions(self.Z)
         F = (
             self.nu * inner(2*sym(grad(u)), grad(v))*dx
-            + self.gamma * inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+            + self.gamma * self.augmented_lagrangian(u, v)
             + self.advect * inner(dot(grad(u), u), v)*dx
             - p * div(v) * dx
             - div(u) * q * dx
@@ -574,9 +587,14 @@ class ConstantPressureSolver(NavierStokesSolver):
     def function_space(self, mesh, k):
         tdim = mesh.topological_dimension()
         if k < tdim:
-            Pk = FiniteElement("Lagrange", mesh.ufl_cell(), k)
-            FB = FiniteElement("FacetBubble", mesh.ufl_cell(), tdim)
-            eleu = VectorElement(NodalEnrichedElement(Pk, FB))
+            if self.family == "br":
+                eleu = FiniteElement("BR", mesh.ufl_cell(), k)
+            elif self.family == "gn":
+                eleu = FiniteElement("GN", mesh.ufl_cell(), k)
+            else:
+                Pk = FiniteElement("Lagrange", mesh.ufl_cell(), k)
+                FB = FiniteElement("FacetBubble", mesh.ufl_cell(), tdim)
+                eleu = VectorElement(NodalEnrichedElement(Pk, FB))
         else:
             Pk = FiniteElement("Lagrange", mesh.ufl_cell(), k)
             eleu = VectorElement(Pk)
@@ -592,7 +610,7 @@ class ConstantPressureSolver(NavierStokesSolver):
         qtransfer = NullTransfer()
         self.vtransfer = vtransfer
         self.qtransfer = qtransfer
-        transfers = {V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else restrict, inject),
+        transfers = {V.ufl_element(): (vtransfer.prolong, vtransfer.restrict if self.restriction else None, None),
                      Q.ufl_element(): (prolong, restrict, qtransfer.inject)}
         return transfers
 
