@@ -89,6 +89,8 @@ class CoarseCellMacroPatches(object):
 
 
 class AutoSchoeberlTransfer(object):
+    manager = TransferManager()
+
     def __init__(self, parameters, tdim, hierarchy):
         self.solver = {}
         self.bcs = {}
@@ -153,7 +155,7 @@ class AutoSchoeberlTransfer(object):
                 return self.nodelist
 
         dim = V.mesh().topological_dimension()
-        bc = FixedDirichletBC(V, ufl.zero(V.ufl_element().value_shape()), nodelist)
+        bc = FixedDirichletBC(V, 0, nodelist)
 
         return bc
 
@@ -199,7 +201,7 @@ class AutoSchoeberlTransfer(object):
             fine = source
             coarse = target
         # Rebuild without any indices
-        V = FunctionSpace(fine.ufl_domain(), fine.function_space().ufl_element())
+        V = fine.function_space().collapse()
         key = V.dim()
 
         firsttime = self.bcs.get(key, None) is None
@@ -213,6 +215,7 @@ class AutoSchoeberlTransfer(object):
             tildeu, rhs = Function(V), Function(V)
 
             bform = self.bform(rhs)
+            # TODO use Cofunction and LinearVariationalSolver
             b = Function(V)
             problem = LinearVariationalProblem(a=a, L=0, u=tildeu, bcs=bcs)
             ctx = _SNESContext(problem, mat_type=self.patchparams["mat_type"],
@@ -283,9 +286,9 @@ class AutoSchoeberlTransfer(object):
 
     def standard_transfer(self, source, target, mode):
         if mode == "prolong":
-            prolong(source, target)
+            self.manager.prolong(source, target)
         elif mode == "restrict":
-            restrict(source, target)
+            self.manager.restrict(source, target)
         else:
             raise NotImplementedError
 
@@ -315,12 +318,22 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         super().__init__(*args, **kwargs)
         self.transfers = {}
 
+    def augmented_lagrangian(self, u, v):
+        from finat.quadrature import make_quadrature
+        V = v.function_space()
+        if V.ufl_element().family() == "Guzman-Neilan":
+            # Override macro quadrature rule
+            cell = V.finat_element.cell
+            al = inner(div(u), div(v))*dx(scheme=make_quadrature(cell, 0))
+        else:
+            al = inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        return al
 
     def form(self, V):
         (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        a = nu * inner(2*sym(grad(u)), grad(v))*dx + gamma * self.augmented_lagrangian(u, v)
         return a
 
     def bform(self, rhs):
@@ -328,7 +341,7 @@ class PkP0SchoeberlTransfer(AutoSchoeberlTransfer):
         (nu, gamma) = self.parameters
         u = TrialFunction(V)
         v = TestFunction(V)
-        a = gamma*inner(cell_avg(div(u)), div(v))*dx(metadata={"mode": "vanilla"})
+        a = gamma * self.augmented_lagrangian(u, v)
         return action(a, rhs)
 
     def standard_transfer(self, source, target, mode):

@@ -1,5 +1,5 @@
 from firedrake import *
-from firedrake.assemble import OneFormAssembler
+from functools import partial
 
 """ For the P1 + FacetBubble space in 3D, the standard prolongation does not
 preserve the flux across coarse grid facets.  We fix this with a manual
@@ -7,6 +7,18 @@ scaling. """
 
 
 class BubbleTransfer(object):
+    def __new__(cls, Vc, Vf):
+        if cls is not BubbleTransfer:
+            return super().__new__(cls)
+
+        fe = Vc.finat_element
+        entity_dofs = fe.entity_dofs()
+        dim = fe.cell.get_spatial_dimension()
+        if fe.value_shape == (dim,) and len(entity_dofs[dim-1][0]) == 1:
+            return NormalBubbleTransfer(Vc, Vf)
+
+        return super().__new__(cls)
+
     def __init__(self, Vc, Vf):
         meshc = Vc.mesh()
         meshf = Vf.mesh()
@@ -35,8 +47,7 @@ class BubbleTransfer(object):
         self.ainv = ainv
         L = inner(inner(self.fbc, n)/0.625, inner(test, n)) + inner(self.fbc - inner(self.fbc, n)*n, test-inner(test, n)*n)
         L = L*ds + avg(L) * dS
-        # This is the guts of assemble(L, tensor=self.rhs), but saves a little time
-        self.assemble_rhs = OneFormAssembler(L, tensor=self.rhs).assemble
+        self.assemble_rhs = partial(assemble, L, tensor=self.rhs)
 
         # TODO: Parameterise these by the element definition.
         # These are correct for P1 + FB in 3D.
@@ -263,3 +274,41 @@ void count(double both[24], double fb[12], double p1[12]) {
                      self.fbf.dat(op2.READ, self.fbf.cell_node_map()),
                      fine.dat(op2.INC, fine.cell_node_map()))
         fine.dat.data[:, :] /= self.countvf.dat.data[:, :]
+
+
+class NormalBubbleTransfer(BubbleTransfer):
+    manager = TransferManager()
+
+    def __init__(self, Vc, Vf):
+        W = Vc
+        depth = W.mesh().topological_dimension() - 1
+
+        mesh_dm = W.mesh().topology_dm
+        W_local_ises_indices = W.dof_dset.local_ises[0].indices
+        section = W.dm.getDefaultSection()
+        indices = []
+        for p in range(*mesh_dm.getDepthStratum(depth)):
+            dof = section.getDof(p)
+            if dof <= 0:
+                continue
+            off = section.getOffset(p)
+            W_indices = slice(off*W.value_size, W.value_size * (off + dof))
+            indices.extend(W_local_ises_indices[W_indices])
+
+        ainv = W.dof_dset.layout_vec.copy()
+        ainv.set(1)
+        ainv[indices] = 1 / 0.625
+        self.ainv = ainv
+
+        self.primal = Function(W)
+        self.dual = Cofunction(W.dual())
+
+    def restrict(self, rf, rc):
+        self.manager.restrict(rf, self.dual)
+        with self.dual.dat.vec_wo as wc, rc.dat.vec_ro as b:
+            wc.pointwiseMult(b, self.ainv)
+
+    def prolong(self, uc, uf):
+        with self.primal.dat.vec_wo as wc, uc.dat.vec_ro as b:
+            wc.pointwiseMult(b, self.ainv)
+        self.manager.prolong(self.primal, uf)

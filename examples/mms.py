@@ -22,7 +22,8 @@ elif args.dim == 3:
 else:
     raise NotImplementedError
 
-res = [1, 9, 10, 50, 90, 100, 400, 500, 900, 1000]
+#res = [1, 9, 10, 50, 90, 100, 400, 500, 900, 1000]
+res = [0.0]
 results = {}
 for re in res:
     results[re] = {}
@@ -42,11 +43,15 @@ for nref in range(1, args.nref+1):
     comm = mesh.comm
 
     for re in res:
+        tmp = re
+        if re == 0:
+            re = 1
         problem.Re.assign(re)
+        re = tmp
 
         (z, info_dict) = solver.solve(re)
         z = solver.z
-        u, p = z.split()
+        u, p = z.subfunctions
         Z = z.function_space()
 
         # uviz = solver.visprolong(u)
@@ -87,7 +92,7 @@ if comm.rank == 0:
     print("gamma =", args.gamma)
     print("h =", hs)
 
-    for re in [10, 100, 500, 1000]:
+    for re in res[::2]:
         print("%%Re = %i" % re)
         print("\\pgfplotstableread[col sep=comma, row sep=\\\\]{%%")
         print("hmin,havg,error_v,error_vgrad, error_p,relerror_v, relerror_vgrad,relerror_p,div\\\\")

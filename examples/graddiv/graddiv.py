@@ -5,6 +5,7 @@ from alfi import get_default_parser
 import argparse
 import numpy
 
+bubbles = {"pkp0", "br", "gn"}
 
 parser = get_default_parser()
 parser.add_argument("--dim", type=int, required=True, choices=[2, 3])
@@ -60,6 +61,10 @@ if args.discretisation == "pkp0" and k < dim:
     Pk = FiniteElement("Lagrange", base.ufl_cell(), k)
     FB = FiniteElement("FacetBubble", base.ufl_cell(), dim)
     eleu = VectorElement(NodalEnrichedElement(Pk, FB))
+elif args.discretisation == "br" and k < dim:
+    eleu = FiniteElement("BR", base.ufl_cell(), k)
+elif args.discretisation == "gn" and k < dim:
+    eleu = FiniteElement("GN", base.ufl_cell(), k)
 else:
     Pk = FiniteElement("Lagrange", base.ufl_cell(), k)
     eleu = VectorElement(Pk)
@@ -75,7 +80,7 @@ if dim == 2:
 else:
     f = Constant((1, 1, 1))
     bclabels = [1, 2, 3, 4, 5, 6]
-if args.discretisation == "pkp0":
+if args.discretisation in bubbles:
     F = inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(cell_avg(div(u)), div(v))*dx - inner(f, v)*dx
 else:
     F = inner(2*sym(grad(u)), grad(v))*dx + gamma*inner(div(u), div(v))*dx - inner(f, v)*dx
@@ -150,7 +155,7 @@ pvd = File("output/output.pvd")
 
 if args.discretisation == "sv":
     vtransfer = SVSchoeberlTransfer((1, gamma), args.dim, args.mh)
-elif args.discretisation == "pkp0":
+elif args.discretisation in bubbles:
     vtransfer = PkP0SchoeberlTransfer((1, gamma), args.dim, args.mh)
 nvproblem = NonlinearVariationalProblem(F, u, bcs=bcs)
 solver = NonlinearVariationalSolver(nvproblem, solver_parameters=sp, options_prefix="")

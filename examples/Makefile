@@ -1,4 +1,4 @@
-exec=mpirun -n 12 python3
+exec=mpiexec -n 1 python3
 pre:
 	mkdir -p logs/
 
@@ -19,6 +19,14 @@ iters2dsv: pre
 mms3dpkp0: pre
 	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation pkp0 --solver-type almg --mh uniform --patch star --gamma 1e4 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dpkp0highgamma.log
 	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation pkp0 --solver-type almg --mh uniform --patch star --gamma 1e0 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dpkp0lowgamma.log
+
+mms3dbr: pre
+	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation br --solver-type almg --mh uniform --patch star --gamma 1e4 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dbrhighgamma.log
+	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation br --solver-type almg --mh uniform --patch star --gamma 1e0 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dbrlowgamma.log
+
+mms3dgn: pre
+	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation gn --solver-type almg --mh uniform --patch star --gamma 1e4 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dgnhighgamma.log
+	$(exec) mms.py --dim 3 --k 1 --nref 5 --discretisation gn --solver-type almg --mh uniform --patch star --gamma 1e0 --stabilisation-type supg --stabilisation--weight 0.05 --baseN 4 2>&1 | tee logs/mms3dgnlowgamma.log
 
 mms2dbary: pre
 	$(exec) mms.py --dim 2 --nref 6 --k 2 --discretisation sv   --solver-type almg --mh bary --patch macro --gamma 1e4 --stabilisation-type burman --stabilisation-weight 5e-3 2>&1 | tee logs/mms2dbarysv.log
